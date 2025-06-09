@@ -166,6 +166,7 @@
             <!-- Tab Navigation -->
             <div class="px-4 border-b border-border-color flex-shrink-0">
                 <nav class="-mb-px flex space-x-6">
+                    <button @click="activeAiTab = 'suggestions'" :class="[activeAiTab === 'suggestions' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">修改建议</button>
                     <button @click="activeAiTab = 'disputes'" :class="[activeAiTab === 'disputes' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">争议焦点</button>
                     <button @click="activeAiTab = 'missing'" :class="[activeAiTab === 'missing' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">缺失条款</button>
                     <button @click="activeAiTab = 'parties'" :class="[activeAiTab === 'parties' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">主体审查</button>
@@ -194,6 +195,31 @@
                         </div>
                     </div>
                     <div v-else class="text-center text-text-light py-8">未发现缺失条款</div>
+                </div>
+                <!-- Modification Suggestions -->
+                <div v-if="activeAiTab === 'suggestions'">
+                    <div v-if="reviewData.modification_suggestions && reviewData.modification_suggestions.length > 0" class="space-y-4">
+                        <div v-for="(item, index) in reviewData.modification_suggestions" :key="'ms-' + index" class="p-4 bg-bg-subtle rounded-md border border-border-color">
+                            <p class="font-semibold text-text-dark">{{ item.title }}</p>
+                            <div class="mt-3 text-sm">
+                                <p class="text-gray-500 font-medium">原文：</p>
+                                <blockquote class="mt-1 p-2 bg-red-50 text-red-800 border-l-4 border-red-400">
+                                    {{ item.original_text }}
+                                </blockquote>
+                            </div>
+                             <div class="mt-3 text-sm">
+                                <p class="text-gray-500 font-medium">建议：</p>
+                                <blockquote class="mt-1 p-2 bg-green-50 text-green-800 border-l-4 border-green-400">
+                                    {{ item.suggested_text }}
+                                </blockquote>
+                            </div>
+                            <div class="mt-3 text-sm">
+                                <p class="text-gray-500 font-medium">理由：</p>
+                                <p class="mt-1 text-text-main">{{ item.reason }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center text-text-light py-8">未发现修改建议</div>
                 </div>
                 <!-- Party Review -->
                 <div v-if="activeAiTab === 'parties'">
@@ -259,7 +285,7 @@
     </div>
 
     <!-- Loading Overlay - Moved inside the single root element -->
-    <div v-if="loading && activeStep < 2" class="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-50">
+    <div v-if="loading && activeStep < 2" class="fixed inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-50">
         <div class="flex flex-col items-center">
             <p class="text-lg font-semibold text-text-dark">{{ loadingMessage }}</p>
         </div>
@@ -290,7 +316,7 @@ export default {
     const loading = ref(false);
     const loadingMessage = ref('');
     const perspective = ref('');
-    const activeAiTab = ref('disputes');
+    const activeAiTab = ref('suggestions');
     const docEditorComponent = ref(null);
     const isEditorReady = ref(false);
     const reAnalyzing = ref(false);
@@ -319,6 +345,7 @@ export default {
       dispute_points: [],
       missing_clauses: [],
       party_review: [],
+      modification_suggestions: [],
     });
 
     const onlyOfficeUrl = process.env.VUE_APP_ONLYOFFICE_URL;
@@ -445,7 +472,10 @@ export default {
         if (newEditor) {
             console.log("[INFO] Editor instance via watcher is now available.");
             isEditorReady.value = true;
-            // ElMessage.success('编辑器已准备就绪，可以开始操作了。');
+            // Force scroll to top after editor loads to prevent layout shift jumping
+            nextTick(() => {
+                window.scrollTo(0, 0);
+            });
         }
     });
 
@@ -473,7 +503,7 @@ export default {
         const res = await api.analyzeContract(analysisPayload);
         Object.assign(reviewData, res.data);
         ElMessage.success('重审完成！');
-        activeAiTab.value = 'disputes'; // Switch to the first tab to show results
+        activeAiTab.value = 'suggestions'; // Switch to the first tab to show results
       } catch(err) {
         const errorMessage = err.response?.data?.error || '重审失败，请稍后重试';
         ElMessage.error(errorMessage);
@@ -581,7 +611,7 @@ export default {
 
                         // Restore UI state from localStorage, as it's the source of truth for user's work.
                         activeStep.value = savedState.activeStep;
-                        activeAiTab.value = savedState.activeAiTab || 'disputes';
+                        activeAiTab.value = savedState.activeAiTab || 'suggestions';
                         
                         // Restore data objects from savedState
                         Object.assign(contract, savedState.contract);
@@ -622,7 +652,7 @@ export default {
       loadingMessage.value = '';
       Object.assign(contract, initialContractState);
       perspective.value = '';
-      Object.assign(reviewData, { dispute_points: [], missing_clauses: [], party_review: [] });
+      Object.assign(reviewData, { dispute_points: [], missing_clauses: [], party_review: [], modification_suggestions: [] });
       isEditorReady.value = false;
       // Reset new states
       Object.assign(preAnalysisData, { contract_type: '', potential_parties: [], suggested_review_points: [], suggested_core_purposes: [] });

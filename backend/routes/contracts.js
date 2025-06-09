@@ -211,6 +211,7 @@ router.post('/analyze', async (req, res) => {
 
         **你的任务:**
         请严格围绕上述框架，对以下合同文本进行全面分析。你的分析报告需要清晰、专业，并直接回应我关注的每一个审查点和核心目的。请将你的分析结果，严格按照下面的JSON格式返回，不需要任何额外的解释或开场白。
+        **特别指示：** "修改建议"是你本次分析的核心产出之一。请你主动、全面地审查合同全文，找出所有你认为可以改进的条款，并尽可能多地提供具体的修改建议。不要局限于用户选择的审查点。
 
         **输出格式 (JSON):**
         {
@@ -230,6 +231,14 @@ router.post('/analyze', async (req, res) => {
             {
               "title": "主体相关审查发现",
               "description": "关于合同主体的审查结论，例如名称是否准确、权利义务是否清晰等。"
+            }
+          ],
+          "modification_suggestions": [
+            {
+              "title": "一个简短的总结，说明这个条款的问题。例如：'入职时间及逾期失效条款不明确'",
+              "original_text": "合同中的原始文字片段。例如：'入职时间：您的入职时间是2021年07月01日前（以具体报到时间为准）；如无异议，请您于2021年3月12日之前确认签名。逾期，则自动失效。'",
+              "suggested_text": "建议修改后的文字片段。例如：'入职时间：您的入职时间是2021年07月01日前，具体报到时间以公司通知为准。如无异议，请您于2021年3月12日之前确认签名。逾期未确认签名的，本录用通知书自动失效。'",
+              "reason": "解释为什么这样修改，以及修改后的好处。例如：'明确入职时间和确认签名的截止日期，避免因日期不明确导致的纠纷。'"
             }
           ]
         }
@@ -284,11 +293,17 @@ router.post('/analyze', async (req, res) => {
 // Fetches full details for a single contract, designed to hydrate the review page
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
+    const userId = req.header('X-User-ID'); // 从请求头中获取 userId
+
+    if (!userId) {
+        return res.status(401).json({ error: 'User ID is required for access.' });
+    }
 
     try {
-        const contractRecord = await db('contracts').where({ id }).first();
+        // 在查询时，同时验证合同ID和用户ID
+        const contractRecord = await db('contracts').where({ id, user_id: userId }).first();
         if (!contractRecord) {
-            return res.status(404).json({ error: 'Contract not found' });
+            return res.status(404).json({ error: 'Contract not found or you do not have permission to access it.' });
         }
 
         // The pre-analysis data and analysis results are stored as JSON strings
@@ -432,10 +447,20 @@ router.post('/pre-analyze', async (req, res) => {
 
 // GET /api/contracts/history (Example, can be expanded)
 router.get('/', async (req, res) => {
+    const userId = req.header('X-User-ID'); // 从请求头中获取 userId
+
+    if (!userId) {
+        return res.status(401).json({ error: 'User ID is required to fetch history.' });
+    }
+
     try {
-        const contracts = await db('contracts').select('id', 'original_filename', 'created_at').orderBy('created_at', 'desc');
+        const contracts = await db('contracts')
+            .where({ user_id: userId }) // 只选择属于该用户的合同
+            .select('id', 'original_filename', 'created_at', 'status')
+            .orderBy('created_at', 'desc');
         res.json(contracts);
     } catch (error) {
+        console.error(`[ERROR] Failed to fetch contract history for user ${userId}:`, error);
         res.status(500).json({ error: 'Failed to fetch contract history.' });
     }
 });

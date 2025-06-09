@@ -4,20 +4,14 @@
     <header class="flex-shrink-0 bg-white border-b border-border-color shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-12">
-                <div class="flex items-center">
+                <router-link to="/" class="flex items-center no-underline">
                     <div class="flex-shrink-0 text-primary font-bold text-lg flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         合同审查
                     </div>
-                </div>
-                <nav class="hidden md:block">
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <router-link to="/" exact class="nav-link" active-class="nav-link-active">合同审查</router-link>
-                        <router-link to="/history" class="nav-link" active-class="nav-link-active">审核历史</router-link>
-                    </div>
-                </nav>
+                </router-link>
             </div>
         </div>
     </header>

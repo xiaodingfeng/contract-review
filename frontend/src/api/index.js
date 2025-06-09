@@ -1,18 +1,32 @@
 import axios from 'axios';
+import { getUserId } from '../user'; // 引入获取用户ID的函数
 
 const apiClient = axios.create({
-    baseURL: 'http://localhost:3000/api',
+    baseURL: process.env.VUE_APP_BACKEND_API_URL || 'http://localhost:3000/api',
     headers: {
         'Content-Type': 'application/json'
     }
 });
 
+// 使用拦截器，在每个请求中自动注入用户ID到请求头
+apiClient.interceptors.request.use(config => {
+    const userId = getUserId();
+    if (userId) {
+        config.headers['X-User-ID'] = userId;
+    }
+    return config;
+}, error => {
+    return Promise.reject(error);
+});
+
 export default {
     // Contract APIs
     getContractHistory() {
+        // 无需再手动传递userId，拦截器会自动处理
         return apiClient.get('/contracts');
     },
     getContractDetails(id) {
+        // 无需再手动传递userId，拦截器会自动处理
         return apiClient.get(`/contracts/${id}`);
     },
     updateContract(id, data) {
