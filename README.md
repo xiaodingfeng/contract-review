@@ -1,17 +1,20 @@
 # ContractGE
 
-Contract General Expert - 一款合同审查AI应用。
+Contract General Expert - 一款合同审查AI应用 (Contract View)。
 
 ## 技术栈
 
-- **前端**: Vue 3 + Element UI
+- **前端**: Vue 3 + Element UI + TailWind CSS
 - **后端**: Node.js + Express
 - **数据库**: SQLite
 - **office在线**: onlyoffice
 
-> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=false --restart=always onlyoffice/documentserver
 
 ## 项目启动
+
+### 启动onlyoffice
+> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=false --restart=always onlyoffice/documentserver
+
 
 ### 1. 启动后端服务
 
