@@ -1,215 +1,276 @@
 <template>
-  <div class="review-container">
-    <el-steps :active="activeStep" finish-status="success" simple class="compact-steps">
-      <el-step title="1. 上传合同" :icon="Upload"></el-step>
-      <el-step title="2. 确认信息并分析" :icon="Select"></el-step>
-      <el-step title="3. 查看并编辑结果" :icon="Document"></el-step>
-    </el-steps>
-
-    <!-- Step 1: Upload -->
-    <div v-if="activeStep === 0" class="step-content">
-       <el-upload
-        class="upload-dragger"
-        drag
-        action="#"
-        :show-file-list="false"
-        :before-upload="handleBeforeUpload"
-        :http-request="({ file }) => uploadAndGo(file)"
-        v-loading.fullscreen.lock="loading"
-        :element-loading-text="loadingMessage"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
-        <div class="el-upload__tip">只能上传.docx文件</div>
-      </el-upload>
+  <div class="w-full h-full flex flex-col">
+    <!-- Custom Steps Header -->
+    <div class="flex-shrink-0 mb-2 p-2 bg-white rounded-lg shadow-sm">
+      <div class="flex items-center">
+        <div class="flex items-center text-xs" :class="activeStep >= 0 ? 'text-primary' : 'text-gray-500'">
+          <div class="flex items-center justify-center w-5 h-5 rounded-full border-2" :class="activeStep >= 0 ? 'border-primary' : 'border-gray-400'">
+            <span v-if="activeStep > 0">✓</span><span v-else>1</span>
+          </div>
+          <span class="ml-1 font-semibold">上传合同</span>
+        </div>
+        <div class="flex-auto border-t-2 mx-2" :class="activeStep >= 1 ? 'border-primary' : 'border-gray-300'"></div>
+        <div class="flex items-center text-xs" :class="activeStep >= 1 ? 'text-primary' : 'text-gray-500'">
+          <div class="flex items-center justify-center w-5 h-5 rounded-full border-2" :class="activeStep >= 1 ? 'border-primary' : 'border-gray-400'">
+             <span v-if="activeStep > 1">✓</span><span v-else>2</span>
+          </div>
+          <span class="ml-1 font-semibold">确认信息并分析</span>
+        </div>
+        <div class="flex-auto border-t-2 mx-2" :class="activeStep >= 2 ? 'border-primary' : 'border-gray-300'"></div>
+        <div class="flex items-center text-xs" :class="activeStep >= 2 ? 'text-primary' : 'text-gray-500'">
+          <div class="flex items-center justify-center w-5 h-5 rounded-full border-2" :class="activeStep >= 2 ? 'border-primary' : 'border-gray-400'">
+            <span>3</span>
+          </div>
+          <span class="ml-1 font-semibold">查看并编辑结果</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Step 2: Confirm & Analyze -->
-    <div 
-      v-if="activeStep === 1" 
-      class="step-content"
-      v-loading.fullscreen.lock="loading"
-      :element-loading-text="loadingMessage"
-    >
+    <!-- Step 0: Upload -->
+    <div v-if="activeStep === 0" class="flex-grow flex flex-col items-center justify-center py-8 px-4 text-center">
+      <h1 class="text-3xl font-bold tracking-tight text-text-dark sm:text-4xl">智能合同审查</h1>
+      <p class="mt-3 text-base leading-7 text-text-light">上传您的合同文档，AI 将为您深度分析、识别风险、守护权益。</p>
+      
+      <div class="mt-10 w-full max-w-2xl">
+        <el-upload
+          class="upload-dragger"
+          drag
+          action=""
+          :http-request="({ file }) => uploadAndGo(file)"
+          :before-upload="handleBeforeUpload"
+          :show-file-list="false"
+        >
+          <div class="flex flex-col items-center justify-center p-10">
+            <svg class="mx-auto h-12 w-12 text-text-light" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <div class="mt-4 flex text-sm leading-6 text-gray-600">
+              <span class="font-semibold text-primary">点击上传</span>
+              <p class="pl-1">或将文件拖到此处</p>
+            </div>
+            <p class="text-xs leading-5 text-gray-500">支持 .docx 格式</p>
+          </div>
+        </el-upload>
+      </div>
+    </div>
+
+    <!-- Step 1: Pre-analysis & Settings -->
+    <div v-if="activeStep === 1" class="w-full max-w-5xl mx-auto py-8">
       <div v-if="preAnalysisData.contract_type">
-        <div class="info-text">
-            文件 <span style="color: #409EFF;">{{ contract.original_filename }}</span> 已上传成功。
-            <br>
-            AI初步分析该合同为：<strong>{{ preAnalysisData.contract_type }}</strong>
+        <div class="text-center mb-10">
+            <p class="text-lg text-text-main">文件 <span class="font-semibold text-primary">{{ contract.original_filename }}</span> 已上传成功。</p>
+            <p class="mt-2 text-md text-text-light">AI初步识别该合同为：<span class="font-semibold text-text-dark">{{ preAnalysisData.contract_type }}</span></p>
         </div>
-        <el-form label-width="120px" class="review-setup-form">
-          <el-form-item label="您的审查立场">
-            <el-select v-model="perspective" placeholder="请选择您的立场">
-              <el-option
-                v-for="party in preAnalysisData.potential_parties"
-                :key="party"
-                :label="party"
-                :value="party">
-              </el-option>
-            </el-select>
-          </el-form-item>
-          <el-form-item label="审查点选择">
-            <el-checkbox-group v-model="selectedReviewPoints">
-              <el-checkbox 
-                v-for="point in preAnalysisData.suggested_review_points" 
-                :key="point" 
-                :label="point"
-                border
-                class="review-point-checkbox"
-              ></el-checkbox>
-            </el-checkbox-group>
-          </el-form-item>
-          <el-form-item label="审查核心目的">
-             <div v-for="(purpose, index) in customPurposes" :key="index" class="purpose-item">
-                <el-input v-model="purpose.value" placeholder="例如：确保权利义务对等"></el-input>
-                <el-button @click="removePurpose(index)" :icon="Remove" circle plain class="purpose-action-btn"></el-button>
-             </div>
-             <el-button @click="addPurpose" :icon="Plus" type="primary" plain style="width: 100%; margin-top: 10px;">添加审查核心目的</el-button>
-          </el-form-item>
-        </el-form>
-        <div class="action-buttons">
-          <el-button @click="goBackToUpload">重新上传</el-button>
-          <el-button type="primary" @click="startAnalysis" :disabled="!perspective || selectedReviewPoints.length === 0">开始分析</el-button>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Left Panel: Perspective -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-text-dark">1. 选择您的审查立场</h3>
+                <p class="text-sm text-text-light mt-1">AI将基于您的立场进行侧重分析。</p>
+                <div class="mt-4">
+                    <el-select v-model="perspective" placeholder="请选择您的立场" class="w-full">
+                        <el-option
+                        v-for="party in allPotentialParties"
+                        :key="party"
+                        :label="party"
+                        :value="party">
+                        </el-option>
+                    </el-select>
+                </div>
+            </div>
+
+            <!-- Right Panel: Actions -->
+            <div class="bg-white rounded-lg shadow-md p-6 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-text-dark">2. 确认审查范围</h3>
+                    <p class="text-sm text-text-light mt-1">默认已全选AI建议的审查点。</p>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                     <button @click="goBackToUpload" class="px-4 py-2 text-sm font-medium text-text-main bg-white border border-border-color rounded-md hover:bg-bg-subtle focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                        重新上传
+                    </button>
+                    <button @click="startAnalysis" :disabled="!perspective" class="px-6 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed">
+                        开始分析
+                    </button>
+                </div>
+            </div>
+        </div>
+
+         <!-- Bottom Panel: Review Points & Purposes -->
+        <div class="bg-white rounded-lg shadow-md p-6 mt-8">
+            <h3 class="text-lg font-semibold text-text-dark mb-4">审查点及核心目的</h3>
+            <div class="mb-6">
+                <h4 class="text-md font-medium text-text-dark mb-2">审查点选择 (可多选)</h4>
+                <el-checkbox-group v-model="selectedReviewPoints" class="flex flex-wrap gap-3">
+                    <el-checkbox 
+                    v-for="point in allSuggestedReviewPoints" 
+                    :key="point" 
+                    :label="point"
+                    border
+                    ></el-checkbox>
+                </el-checkbox-group>
+            </div>
+            <div>
+                 <h4 class="text-md font-medium text-text-dark mb-2">审查核心目的 (可自定义)</h4>
+                 <div v-for="(purpose, index) in customPurposes" :key="index" class="flex items-center mb-2">
+                    <el-autocomplete
+                        v-model="purpose.value"
+                        :fetch-suggestions="querySearchCorePurposes"
+                        placeholder="搜索或输入新目的"
+                        class="w-full"
+                        trigger-on-focus
+                    ></el-autocomplete>
+                    <button @click="removePurpose(index)" class="ml-2 text-gray-400 hover:text-danger">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </button>
+                 </div>
+                 <button @click="addPurpose" class="mt-2 text-sm font-medium text-primary hover:text-primary-dark flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    添加目的
+                 </button>
+            </div>
         </div>
       </div>
     </div>
     
-    <!-- Step 3: Review & Edit -->
-    <div v-if="activeStep === 2" class="step-content full-height-step">
-        <el-row :gutter="20" class="full-height-row">
-            <!-- Left Side: OnlyOffice Editor -->
-            <el-col :span="14" class="full-height-col">
-                 <div id="onlyoffice-editor-container" class="editor-container">
-                    <DocumentEditor
-                        v-if="contract.editorConfig"
-                        id="docEditor"
-                        ref="docEditorComponent"
-                        documentServerUrl="http://192.168.1.5:8081/"
-                        :config="contract.editorConfig"
-                    />
-                </div>
-            </el-col>
-
-            <!-- Right Side: AI Suggestions -->
-            <el-col :span="10" class="full-height-col">
-                 <el-card class="box-card ai-panel">
-                    <template #header>
-                        <div class="ai-panel-header">
-                            <span>AI 审查报告</span>
-                            <div>
-                                <template v-if="cameFromHistory">
-                                    <el-button @click="goBackToUpload" type="primary" link>重新上传</el-button>
-                                    <el-button @click="goBackSmart" type="primary" link style="margin-left: 10px;">返回历史列表</el-button>
-                                </template>
-                                <template v-else>
-                                    <el-button @click="goBackSmart" type="primary" link>返回上一步</el-button>
-                                </template>
-                            </div>
-                        </div>
+    <!-- Step 2: Review & Edit -->
+    <div v-if="activeStep === 2" class="flex-grow flex space-x-4">
+        <!-- Left Side: OnlyOffice Editor -->
+        <div class="w-2/3 bg-white rounded-lg shadow-md overflow-hidden">
+            <DocumentEditor
+                v-if="contract.editorConfig"
+                id="docEditor"
+                ref="docEditorComponent"
+                :documentServerUrl="onlyOfficeUrl"
+                :config="contract.editorConfig"
+                class="h-full"
+            />
+        </div>
+        
+        <!-- Right Side: AI Review Panel -->
+        <div class="w-1/3 bg-white rounded-lg shadow-md flex flex-col">
+            <!-- Panel Header -->
+            <div class="p-4 border-b border-border-color flex justify-between items-center flex-shrink-0">
+                <h3 class="text-lg font-semibold text-text-dark">AI 审查报告</h3>
+                <div>
+                    <template v-if="cameFromHistory">
+                        <button @click="goBackToUpload" class="text-sm font-medium text-primary hover:text-primary-dark">重新上传</button>
+                        <button @click="goBackSmart" class="ml-4 text-sm font-medium text-primary hover:text-primary-dark">返回历史</button>
                     </template>
-                    <el-tabs v-model="activeAiTab" type="border-card" class="ai-tabs">
-                        <el-tab-pane label="争议焦点" name="disputes">
-                            <div class="suggestion-list">
-                                <div v-for="(item, index) in reviewData.dispute_points" :key="'dp-' + index" class="suggestion-item">
-                                    <p><strong>{{ item.title }}</strong></p>
-                                    <p>{{ item.description }}</p>
-                                </div>
-                                <el-empty v-if="!reviewData.dispute_points || reviewData.dispute_points.length === 0" description="未发现争议焦点"></el-empty>
-                            </div>
-                        </el-tab-pane>
-                        <el-tab-pane label="缺失条款" name="missing">
-                             <div class="suggestion-list">
-                                <div v-for="(item, index) in reviewData.missing_clauses" :key="'mc-' + index" class="suggestion-item">
-                                    <p><strong>{{ item.title }}</strong></p>
-                                    <p>{{ item.description }}</p>
-                                </div>
-                                <el-empty v-if="!reviewData.missing_clauses || reviewData.missing_clauses.length === 0" description="未发现缺失条款"></el-empty>
+                    <template v-else>
+                        <button @click="goBackSmart" class="text-sm font-medium text-primary hover:text-primary-dark">返回上一步</button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="px-4 border-b border-border-color flex-shrink-0">
+                <nav class="-mb-px flex space-x-6">
+                    <button @click="activeAiTab = 'disputes'" :class="[activeAiTab === 'disputes' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">争议焦点</button>
+                    <button @click="activeAiTab = 'missing'" :class="[activeAiTab === 'missing' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">缺失条款</button>
+                    <button @click="activeAiTab = 'parties'" :class="[activeAiTab === 'parties' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">主体审查</button>
+                    <button @click="activeAiTab = 're-review'" :class="[activeAiTab === 're-review' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">重审</button>
+                </nav>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="p-6 overflow-y-auto flex-grow">
+                <!-- Dispute Points -->
+                <div v-if="activeAiTab === 'disputes'">
+                    <div v-if="reviewData.dispute_points && reviewData.dispute_points.length > 0" class="space-y-4">
+                        <div v-for="(item, index) in reviewData.dispute_points" :key="'dp-' + index" class="p-4 bg-bg-subtle rounded-md">
+                            <p class="font-semibold text-text-dark">{{ item.title }}</p>
+                            <p class="mt-1 text-sm text-text-main">{{ item.description }}</p>
+                        </div>
+                    </div>
+                    <div v-else class="text-center text-text-light py-8">未发现争议焦点</div>
+                </div>
+                <!-- Missing Clauses -->
+                <div v-if="activeAiTab === 'missing'">
+                    <div v-if="reviewData.missing_clauses && reviewData.missing_clauses.length > 0" class="space-y-4">
+                        <div v-for="(item, index) in reviewData.missing_clauses" :key="'mc-' + index" class="p-4 bg-bg-subtle rounded-md">
+                            <p class="font-semibold text-text-dark">{{ item.title }}</p>
+                            <p class="mt-1 text-sm text-text-main">{{ item.description }}</p>
+                        </div>
+                    </div>
+                    <div v-else class="text-center text-text-light py-8">未发现缺失条款</div>
+                </div>
+                <!-- Party Review -->
+                <div v-if="activeAiTab === 'parties'">
+                     <div v-if="reviewData.party_review && reviewData.party_review.length > 0" class="space-y-4">
+                        <div v-for="(item, index) in reviewData.party_review" :key="'pr-' + index" class="p-4 bg-bg-subtle rounded-md">
+                            <p class="font-semibold text-text-dark">{{ item.title }}</p>
+                            <p class="mt-1 text-sm text-text-main">{{ item.description }}</p>
+                        </div>
+                    </div>
+                    <div v-else class="text-center text-text-light py-8">主体信息无风险</div>
+                </div>
+                <!-- Re-review Form -->
+                <div v-if="activeAiTab === 're-review'">
+                   <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-text-main">合同类型</label>
+                            <el-input v-model="preAnalysisData.contract_type" class="mt-1"></el-input>
+                        </div>
+                        <div>
+                             <label class="block text-sm font-medium text-text-main">审查立场</label>
+                             <el-select v-model="perspective" placeholder="请选择或输入您的立场" class="w-full mt-1" filterable allow-create>
+                                <el-option v-for="party in allPotentialParties" :key="party" :label="party" :value="party"></el-option>
+                             </el-select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-text-main">审查点选择</label>
+                             <div class="mt-2 p-3 bg-bg-subtle rounded-md">
+                                <el-checkbox-group v-model="selectedReviewPoints" class="flex flex-wrap gap-2">
+                                    <el-checkbox v-for="point in allSuggestedReviewPoints" :key="point" :label="point" border></el-checkbox>
+                                </el-checkbox-group>
                              </div>
-                        </el-tab-pane>
-                        <el-tab-pane label="主体审查" name="parties">
-                             <div class="suggestion-list">
-                                <div v-for="(item, index) in reviewData.party_review" :key="'pr-' + index" class="suggestion-item">
-                                    <p><strong>{{ item.title }}</strong></p>
-                                    <p>{{ item.description }}</p>
-                                </div>
-                                <el-empty v-if="!reviewData.party_review || reviewData.party_review.length === 0" description="主体信息无风险"></el-empty>
-                             </div>
-                        </el-tab-pane>
-                         <el-tab-pane label="重审" name="re-review">
-                            <div class="re-review-panel">
-                              <el-form label-position="top" class="re-review-form">
-                                <el-form-item>
-                                  <template #label>
-                                    <span class="form-label">合同类型</span>
-                                  </template>
-                                  <el-input v-model="preAnalysisData.contract_type"></el-input>
-                                </el-form-item>
-                                <el-form-item>
-                                   <template #label>
-                                    <span class="form-label">审查立场</span>
-                                  </template>
-                                  <el-select v-model="perspective" placeholder="请选择您的立场" style="width: 100%;">
-                                    <el-option
-                                      v-for="party in preAnalysisData.potential_parties"
-                                      :key="party"
-                                      :label="party"
-                                      :value="party">
-                                    </el-option>
-                                  </el-select>
-                                </el-form-item>
-                                <el-form-item>
-                                  <template #label>
-                                    <span class="form-label">审查点选择</span>
-                                  </template>
-                                  <div class="checkbox-group-wrapper">
-                                    <el-checkbox-group v-model="selectedReviewPoints">
-                                      <el-checkbox 
-                                        v-for="point in preAnalysisData.suggested_review_points" 
-                                        :key="point" 
-                                        :label="point"
-                                        border
-                                        class="review-point-checkbox"
-                                      ></el-checkbox>
-                                    </el-checkbox-group>
-                                  </div>
-                                </el-form-item>
-                                <el-form-item>
-                                  <template #label>
-                                    <span class="form-label">审查核心目的</span>
-                                  </template>
-                                   <div v-for="(purpose, index) in customPurposes" :key="index" class="purpose-item">
-                                      <el-input v-model="purpose.value" placeholder="例如：确保权利义务对等"></el-input>
-                                      <el-button @click="removePurpose(index)" :icon="Remove" circle plain class="purpose-action-btn"></el-button>
-                                   </div>
-                                   <el-button @click="addPurpose" :icon="Plus" type="primary" plain style="width: 100%; margin-top: 10px;">添加审查核心目的</el-button>
-                                </el-form-item>
-                                <el-form-item>
-                                  <el-button 
-                                      type="primary" 
-                                      @click="startReAnalysis" 
-                                      :disabled="!perspective || selectedReviewPoints.length === 0"
-                                      style="width: 100%;"
-                                      :loading="reAnalyzing"
-                                  >
-                                      确认重审
-                                  </el-button>
-                                </el-form-item>
-                              </el-form>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-text-main">审查核心目的</label>
+                             <div v-for="(purpose, index) in customPurposes" :key="index" class="flex items-center mt-1">
+                                <el-autocomplete
+                                    v-model="purpose.value"
+                                    :fetch-suggestions="querySearchCorePurposes"
+                                    placeholder="搜索或输入新目的"
+                                    class="w-full"
+                                    trigger-on-focus
+                                ></el-autocomplete>
+                                <button @click="removePurpose(index)" class="ml-2 text-gray-400 hover:text-danger"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>
                             </div>
-                        </el-tab-pane>
-                    </el-tabs>
-                 </el-card>
-            </el-col>
-        </el-row>
+                            <button @click="addPurpose" class="mt-2 text-sm font-medium text-primary hover:text-primary-dark flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                添加目的
+                            </button>
+                        </div>
+                        <div class="pt-4">
+                            <button 
+                                @click="startReAnalysis" 
+                                :disabled="!perspective || selectedReviewPoints.length === 0 || reAnalyzing"
+                                class="w-full px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {{ reAnalyzing ? '正在重审...' : '确认重审' }}
+                            </button>
+                        </div>
+                   </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay - Moved inside the single root element -->
+    <div v-if="loading && activeStep < 2" class="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="flex flex-col items-center">
+            <p class="text-lg font-semibold text-text-dark">{{ loadingMessage }}</p>
+        </div>
     </div>
   </div>
 </template>
 
 <script>
 import { ref, reactive, watch, toRaw, onMounted, nextTick } from 'vue';
-import { ElMessage } from 'element-plus';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
-import { UploadFilled, Document, Select, Upload, Plus, Remove } from '@element-plus/icons-vue';
+import { ElMessage, ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete } from 'element-plus';
 import api from '../api';
 import { getUserId } from '../user';
 import { DocumentEditor } from "@onlyoffice/document-editor-vue";
@@ -218,7 +279,7 @@ export default {
   name: 'ReviewView',
   components: {
     DocumentEditor,
-    UploadFilled
+    ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete
   },
   setup() {
     const route = useRoute();
@@ -233,6 +294,10 @@ export default {
     const docEditorComponent = ref(null);
     const isEditorReady = ref(false);
     const reAnalyzing = ref(false);
+
+    const allSuggestedReviewPoints = ref([]);
+    const allPotentialParties = ref([]);
+    const allSuggestedCorePurposes = ref([]);
 
     const initialContractState = {
       id: null,
@@ -256,6 +321,8 @@ export default {
       party_review: [],
     });
 
+    const onlyOfficeUrl = process.env.VUE_APP_ONLYOFFICE_URL;
+
     const handleBeforeUpload = (file) => {
         const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         if (!isDocx) {
@@ -277,6 +344,9 @@ export default {
         try {
             const preAnalysisRes = await api.preAnalyzeContract({ contractId: contract.id });
             Object.assign(preAnalysisData, preAnalysisRes.data);
+            allSuggestedReviewPoints.value = [...preAnalysisData.suggested_review_points];
+            allPotentialParties.value = [...preAnalysisData.potential_parties];
+            allSuggestedCorePurposes.value = [...preAnalysisData.suggested_core_purposes];
             // Pre-select all suggested review points by default
             selectedReviewPoints.value = [...preAnalysisData.suggested_review_points];
             // Pre-fill core purposes from AI suggestions
@@ -319,7 +389,8 @@ export default {
     };
 
     const goBackToUpload = () => {
-      resetState();
+        console.log('[DEBUG] goBackToUpload clicked.');
+        resetState();
     };
     
     const goBackToConfirm = () => {
@@ -335,12 +406,19 @@ export default {
         loading.value = true;
         loadingMessage.value = 'AI正在深度审查合同，这可能需要1-2分钟...';
         try {
+            // This is the new, more complete payload
             const analysisPayload = {
                 contractId: contract.id,
-                contractType: preAnalysisData.contract_type,
                 userPerspective: perspective.value,
-                reviewPoints: selectedReviewPoints.value,
-                corePurposes: customPurposes.value.map(p => p.value).filter(p => p.trim() !== ''),
+                preAnalysisData: {
+                    contract_type: preAnalysisData.contract_type,
+                    potential_parties: allPotentialParties.value,
+                    suggested_review_points: allSuggestedReviewPoints.value,
+                    suggested_core_purposes: allSuggestedCorePurposes.value,
+                    // Pass the *selected* points and purposes for the AI to focus on
+                    reviewPoints: selectedReviewPoints.value,
+                    core_purposes: customPurposes.value.map(p => p.value).filter(p => p.trim() !== ''),
+                },
             };
             const res = await api.analyzeContract(analysisPayload);
             Object.assign(reviewData, res.data);
@@ -378,12 +456,19 @@ export default {
       }
       reAnalyzing.value = true;
       try {
+        // Use the same, new payload structure for re-analysis
         const analysisPayload = {
           contractId: contract.id,
-          contractType: preAnalysisData.contract_type,
           userPerspective: perspective.value,
-          reviewPoints: selectedReviewPoints.value,
-          corePurposes: customPurposes.value.map(p => p.value).filter(p => p.trim() !== ''),
+          preAnalysisData: {
+                contract_type: preAnalysisData.contract_type,
+                potential_parties: allPotentialParties.value,
+                suggested_review_points: allSuggestedReviewPoints.value,
+                suggested_core_purposes: allSuggestedCorePurposes.value,
+                // Pass the *selected* points and purposes for the AI to focus on
+                reviewPoints: selectedReviewPoints.value,
+                core_purposes: customPurposes.value.map(p => p.value).filter(p => p.trim() !== ''),
+            },
         };
         const res = await api.analyzeContract(analysisPayload);
         Object.assign(reviewData, res.data);
@@ -410,10 +495,16 @@ export default {
             activeStep.value = 2; // Directly go to the review step
             Object.assign(contract, contractData.contract);
             perspective.value = contractData.perspective;
-            Object.assign(preAnalysisData, contractData.preAnalysisData);
+            Object.assign(preAnalysisData, contractData.preAnalysisData || {});
+            // The server now returns the complete list, so we can trust it.
+            // Add defensive checks to prevent crashes if preAnalysisData or its keys are missing.
+            allSuggestedReviewPoints.value = contractData.preAnalysisData?.suggested_review_points || [];
+            allPotentialParties.value = contractData.preAnalysisData?.potential_parties || [];
+            allSuggestedCorePurposes.value = contractData.preAnalysisData?.suggested_core_purposes || [];
+            // The server also returns the specific selections for this historical review
             selectedReviewPoints.value = contractData.selectedReviewPoints || [];
             customPurposes.value = contractData.customPurposes || [{ value: '' }];
-            Object.assign(reviewData, contractData.reviewData);
+            Object.assign(reviewData, contractData.reviewData || {});
             
             // Save this loaded state to localStorage so a refresh works correctly
             saveState();
@@ -443,6 +534,9 @@ export default {
             reviewData: toRaw(reviewData),
             activeAiTab: activeAiTab.value,
             cameFromHistory: cameFromHistory.value,
+            allSuggestedReviewPoints: allSuggestedReviewPoints.value,
+            allPotentialParties: allPotentialParties.value,
+            allSuggestedCorePurposes: allSuggestedCorePurposes.value,
         };
         // Only save if a contract has been uploaded to avoid storing empty sessions
         if (stateToSave.contract && stateToSave.contract.id) {
@@ -450,26 +544,68 @@ export default {
         }
     };
 
+    const querySearchCorePurposes = (queryString, cb) => {
+        const results = queryString
+            ? allSuggestedCorePurposes.value.filter(p => p.toLowerCase().includes(queryString.toLowerCase()))
+            : allSuggestedCorePurposes.value;
+        // The autocomplete component expects an array of objects with a `value` key.
+        cb(results.map(p => ({ value: p })));
+    };
+
     // Watch for any state changes and save them
     watch([activeStep, perspective, activeAiTab], saveState);
-    watch([contract, preAnalysisData, reviewData, selectedReviewPoints, customPurposes], saveState, { deep: true });
+    watch([
+        contract, 
+        preAnalysisData, 
+        reviewData, 
+        selectedReviewPoints, 
+        customPurposes,
+        allSuggestedReviewPoints,
+        allPotentialParties,
+        allSuggestedCorePurposes,
+    ], saveState, { deep: true });
 
-    const loadState = () => {
+    const loadState = async () => {
         const savedStateJSON = localStorage.getItem('review_session');
         if (savedStateJSON) {
             try {
                 const savedState = JSON.parse(savedStateJSON);
-                // A simple check to ensure the session data is valid before loading
                 if (savedState.contract && savedState.contract.id) {
-                    activeStep.value = savedState.activeStep;
-                    Object.assign(contract, savedState.contract);
-                    perspective.value = savedState.perspective;
-                    Object.assign(preAnalysisData, savedState.preAnalysisData);
-                    selectedReviewPoints.value = savedState.selectedReviewPoints || [];
-                    customPurposes.value = savedState.customPurposes || [{ value: '' }];
-                    Object.assign(reviewData, savedState.reviewData);
-                    activeAiTab.value = savedState.activeAiTab || 'disputes';
-                    cameFromHistory.value = savedState.cameFromHistory || false;
+                    loading.value = true;
+                    loadingMessage.value = '正在恢复您的会话...';
+                    
+                    try {
+                        // Fetch fresh contract editorConfig from the server to get a new, valid token.
+                        const response = await api.getContractDetails(savedState.contract.id);
+                        const serverEditorConfig = response.data.contract.editorConfig;
+
+                        // Restore UI state from localStorage, as it's the source of truth for user's work.
+                        activeStep.value = savedState.activeStep;
+                        activeAiTab.value = savedState.activeAiTab || 'disputes';
+                        
+                        // Restore data objects from savedState
+                        Object.assign(contract, savedState.contract);
+                        // CRITICAL: Overwrite with the fresh editor config from the server.
+                        contract.editorConfig = serverEditorConfig;
+                        
+                        perspective.value = savedState.perspective;
+                        Object.assign(preAnalysisData, savedState.preAnalysisData || {});
+                        Object.assign(reviewData, savedState.reviewData || {});
+                        
+                        // Restore lists from savedState
+                        selectedReviewPoints.value = savedState.selectedReviewPoints || [];
+                        customPurposes.value = savedState.customPurposes || [{ value: '' }];
+                        allSuggestedReviewPoints.value = savedState.allSuggestedReviewPoints || [];
+                        allPotentialParties.value = savedState.allPotentialParties || [];
+                        allSuggestedCorePurposes.value = savedState.allSuggestedCorePurposes || [];
+
+                    } catch (error) {
+                         console.error(`Failed to refresh session for contract ${savedState.contract.id}:`, error);
+                         ElMessage.error('刷新会话失败，将重置状态。');
+                         resetState(); // Clear the invalid session
+                    } finally {
+                        loading.value = false;
+                    }
                 }
             } catch (e) {
                 console.error("Failed to parse saved state, clearing invalid session.", e);
@@ -479,6 +615,7 @@ export default {
     };
 
     const resetState = () => {
+      console.log('[DEBUG] resetState called.');
       isResetting = true; // Lock the saving mechanism
       activeStep.value = 0;
       loading.value = false;
@@ -491,23 +628,29 @@ export default {
       Object.assign(preAnalysisData, { contract_type: '', potential_parties: [], suggested_review_points: [], suggested_core_purposes: [] });
       selectedReviewPoints.value = [];
       customPurposes.value = [{ value: '' }];
+      allSuggestedReviewPoints.value = [];
+      allPotentialParties.value = [];
+      allSuggestedCorePurposes.value = [];
       // Clear the session from localStorage
       localStorage.removeItem('review_session');
+      console.log('[DEBUG] review_session removed from localStorage.');
 
       // Use nextTick to ensure the DOM has updated and state changes have propagated
       // before we unlock the saving mechanism.
       nextTick(() => {
         isResetting = false;
+        console.log('[DEBUG] resetState finished and lock released.');
       });
     };
 
     // This is the correct guard for handling navigation that reuses the same component instance.
     onBeforeRouteUpdate((to, from) => {
+      console.log(`[DEBUG] onBeforeRouteUpdate: from ${from.fullPath} to ${to.fullPath}`);
       // When navigating from a history-loaded review page (which has a contract_id) 
       // back to the main 'start' page (which does not), we must reset the entire state
       // to ensure a completely fresh start.
       if (from.query.contract_id && !to.query.contract_id) {
-          console.log('[INFO] Navigating from a history item to main page. Resetting component state.');
+          console.log('[DEBUG] Route condition met. Calling resetState.');
           resetState();
       }
     });
@@ -551,12 +694,6 @@ export default {
       startAnalysis,
       docEditorComponent,
       isEditorReady,
-      Document,
-      Select,
-      Upload,
-      UploadFilled,
-      Plus,
-      Remove,
       preAnalysisData,
       selectedReviewPoints,
       customPurposes,
@@ -567,197 +704,72 @@ export default {
       uploadAndGo,
       cameFromHistory,
       goBackSmart,
+      onlyOfficeUrl,
+      allSuggestedReviewPoints,
+      allPotentialParties,
+      querySearchCorePurposes,
     };
   }
 };
 </script>
 
+<style>
+/* Add global overrides for Element Plus components we are keeping */
+/* Select Dropdown */
+.el-select-dropdown {
+  @apply rounded-lg shadow-lg border border-border-color;
+}
+.el-select-dropdown__item {
+  @apply text-text-main;
+}
+.el-select-dropdown__item.hover, .el-select-dropdown__item:hover {
+  @apply bg-primary-light text-primary-dark;
+}
+.el-select-dropdown__item.selected {
+  @apply text-primary-dark font-semibold;
+}
+
+/* Checkbox */
+.el-checkbox.is-bordered {
+ @apply bg-white border-border-color hover:border-primary;
+}
+.el-checkbox.is-bordered.is-checked {
+  @apply border-primary;
+}
+.el-checkbox__inner {
+  @apply border-border-color;
+}
+.el-checkbox__input.is-checked .el-checkbox__inner, .el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  @apply bg-primary border-primary;
+}
+.el-checkbox__label {
+  @apply text-text-main;
+}
+.el-checkbox__input.is-checked+.el-checkbox__label {
+  @apply text-primary;
+}
+
+/* Input */
+.el-input__wrapper {
+  @apply rounded-md border border-border-color shadow-sm transition-colors duration-200 ease-in-out focus-within:border-primary focus-within:ring-1 focus-within:ring-primary;
+}
+</style>
+
 <style scoped>
-.review-container {
-  padding: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-.compact-steps {
-    padding: 8px 0;
-    margin: 0;
-    flex-shrink: 0;
-    border-bottom: 1px solid #e4e7ed;
-    background-color: #fafafa;
-}
+/* Using Tailwind utility classes, so scoped styles are minimal. */
+/* You can add specific component-level styles here if needed. */
 
-.compact-steps .el-step__title {
-    font-size: 13px !important;
-}
-
-.step-content {
-  margin-top: 15px;
-  padding: 0 15px 15px 15px;
-  flex-grow: 1;
-  min-height: 0;
-  box-sizing: border-box;
-}
-.full-height-step {
-  height: 100%;
+.upload-dragger .el-upload-dragger {
+  @apply bg-bg-subtle border-2 border-dashed border-border-color rounded-lg transition-colors duration-200 ease-in-out;
   display: flex;
   flex-direction: column;
-}
-.full-height-container {
-    height: calc(100vh - 120px); /* Adjust based on header/footer height */
-}
-.full-height-row {
-  flex-grow: 1; /* Allow the row to take up available vertical space */
-  min-height: 0; /* Prevent flexbox overflow issues */
-  display: flex;
-}
-.full-height-col {
-  display: flex;
-  flex-direction: column;
-}
-.upload-dragger {
+  justify-content: center;
+  align-items: center;
+  height: 180px; /* Or any other fixed height */
   width: 100%;
-  border: 1px solid #dcdfe6;
-}
-.editor-container {
-  width: 100%;
-  height: 100%;
-  border: 1px solid #dcdfe6;
-}
-.ai-panel {
-  flex-grow: 1; /* Allow the panel to take up available vertical space */
-  min-height: 0; /* Prevent flexbox overflow issues */
-  display: flex;
-  flex-direction: column;
-}
-.ai-panel ::v-deep(.el-card__header) {
-  padding: 12px 20px;
-  flex-shrink: 0;
-}
-.ai-panel ::v-deep(.el-card__body) {
-  padding: 0;
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.ai-panel-header {
-  font-size: 16px;
-  font-weight: bold;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.ai-tabs {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  border: none;
-}
-.ai-tabs ::v-deep(.el-tabs__header) {
-    flex-shrink: 0;
-    order: 1;
-}
-.ai-tabs ::v-deep(.el-tabs__content) {
-    flex-grow: 1;
-    overflow-y: auto;
-    padding: 15px;
-    order: 2;
-}
-.review-report h3 {
-    margin-bottom: 15px;
-    font-size: 18px;
-    color: #303133;
-    text-align: center;
 }
 
-.suggestion-list {
-    padding-right: 10px; /* Space for scrollbar */
-    border: 1px solid #EBEEF5;
-    border-radius: 4px;
-}
-
-.suggestion-item {
-    padding: 10px 15px;
-    border-bottom: 1px solid #EBEEF5;
-}
-.suggestion-item:last-child {
-    border-bottom: none;
-}
-.suggestion-item p {
-    margin: 5px 0;
-    font-size: 14px;
-}
-.info-text {
-    color: #606266;
-    font-size: 16px;
-    margin-bottom: 20px;
-    text-align: center;
-    line-height: 1.5;
-}
-.el-icon--upload {
-    font-size: 67px;
-    color: #c0c4cc;
-    margin: 40px 0 16px;
-    line-height: 50px;
-}
-
-.review-setup-form {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.action-buttons {
-  max-width: 800px;
-  margin: 20px auto 0;
-  text-align: right;
-}
-
-.review-point-checkbox {
-  margin: 5px;
-  width: auto;
-  min-width: 200px;
-  height: auto;
-  min-height: 32px;
-  white-space: normal;
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 15px;
-}
-
-.review-point-checkbox .el-checkbox__label {
-  white-space: normal !important;
-  word-break: break-all;
-  line-height: 1.4;
-  text-align: left;
-}
-
-.purpose-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.purpose-action-btn {
-  margin-left: 10px;
-}
-
-.re-review-panel {
-  padding: 5px 15px 5px 5px;
-}
-.re-review-form .el-form-item {
-  margin-bottom: 18px;
-}
-.re-review-form .form-label {
-  font-weight: 600;
-  color: #606266;
-  font-size: 14px;
-}
-.re-review-form .checkbox-group-wrapper {
-  background-color: #fafcff;
-  padding: 10px;
-  border-radius: 4px;
-  border: 1px solid #eaf2ff;
+.upload-dragger .el-upload-dragger:hover {
+  @apply border-primary;
 }
 </style> 

@@ -22,6 +22,7 @@ async function resetAndRebuildDatabase() {
         table.text('analysis_result'); // To store the JSON result from the AI analysis
         table.text('pre_analysis_data'); // To store the full payload from the pre-analysis/setup step
         table.string('status'); // To track the contract's state (e.g., 'Uploaded', 'Reviewed')
+        table.text('pre_analysis_cache'); // Add column to cache pre-analysis results
         table.timestamps(true, true);
       });
       console.log('[DB Init] New `contracts` table created successfully. Schema is now up-to-date.');

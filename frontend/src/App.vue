@@ -1,90 +1,65 @@
 <template>
-  <div id="app">
-    <el-container class="app-container">
-      <el-header class="app-header">
-        <div class="logo-area">
-          <img alt="App logo" src="./assets/logo.png" class="logo-img">
-          <span class="logo-text">智能合同审查系统</span>
+  <div id="app" class="h-screen flex flex-col bg-bg-main font-sans">
+    <!-- Header -->
+    <header class="flex-shrink-0 bg-white border-b border-border-color shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-12">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 text-primary font-bold text-lg flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        合同审查
+                    </div>
+                </div>
+                <nav class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <router-link to="/" exact class="nav-link" active-class="nav-link-active">合同审查</router-link>
+                        <router-link to="/history" class="nav-link" active-class="nav-link-active">审核历史</router-link>
+                    </div>
+                </nav>
+            </div>
         </div>
-        <el-menu :default-active="$route.path" class="app-menu" mode="horizontal" :router="true" @select="handleMenuSelect">
-          <el-menu-item index="/">合同审查</el-menu-item>
-          <el-menu-item index="/history">审核历史</el-menu-item>
-          <el-menu-item index="/qna">合同问答</el-menu-item>
-          <el-menu-item index="/settings">设置</el-menu-item>
-        </el-menu>
-      </el-header>
-      <el-main class="app-main">
-        <router-view class="content-view"/>
-      </el-main>
-    </el-container>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-4">
+       <router-view></router-view>
+    </main>
   </div>
 </template>
 
 <script>
 export default {
   name: 'App',
-  methods: {
-    handleMenuSelect(index) {
-      // The :router="true" prop handles navigation automatically.
-      // This method is kept for potential future use, e.g., logging.
-      console.log('Navigating to:', index);
-    }
-  }
-}
+};
 </script>
 
 <style>
-/* Basic reset and global styles */
-html, body, #app {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+/* Remove all component-specific styles, handled by Tailwind now */
+#app {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f2f3f5;
 }
 
-.app-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: solid 1px var(--el-menu-border-color);
-  padding: 0 20px;
+html {
+  overflow-y: scroll;
 }
 
-.logo-area {
-  display: flex;
-  align-items: center;
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-.logo-img {
-  width: 30px;
-  height: 30px;
-  margin-right: 10px;
+.nav-link {
+    @apply text-text-light px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200;
 }
 
-.logo-text {
-  font-size: 18px;
-  font-weight: bold;
+.nav-link:hover {
+    @apply text-text-dark bg-bg-subtle;
 }
 
-.app-main {
-  padding: 15px; /* Reduce padding */
-  height: calc(100vh - 40px); /* Adjust for header height */
-  box-sizing: border-box;
-}
-
-.content-view {
-  background-color: #ffffff;
-  padding: 20px;
-  border-radius: 4px;
-  border: 1px solid #e4e7ed;
-  min-height: calc(100vh - 140px); /* Adjust based on new header+tabs height */
-  height: 100%;
-  box-sizing: border-box;
-  display: flex; /* Ensure content inside can flex correctly */
-  flex-direction: column;
+.nav-link-active {
+    @apply bg-primary-light text-primary-dark;
 }
 </style> 

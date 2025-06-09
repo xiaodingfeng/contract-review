@@ -9,7 +9,7 @@ Contract General Expert - 一款合同审查AI应用。
 - **数据库**: SQLite
 - **office在线**: onlyoffice
 
-> docker run -i -t -d -p 8081:80 --restart=always onlyoffice/documentserver
+> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=false --restart=always onlyoffice/documentserver
 
 ## 项目启动
 

@@ -63,10 +63,13 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const documentKey = uuidv4();
 
     try {
+        // Decode filename correctly FIRST, before any other operation
+        const originalFilenameDecoded = iconv.decode(Buffer.from(req.file.originalname, 'binary'), 'utf-8');
+
         const [newContract] = await db('contracts')
             .insert({
                 user_id: userId,
-                original_filename: req.file.originalname,
+                original_filename: originalFilenameDecoded, // Use the DECODED name for the database
                 storage_path: req.file.path,
                 document_key: documentKey,
                 status: 'Uploaded'
@@ -76,9 +79,6 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (!newContract) {
             return res.status(500).json({ error: 'Failed to insert contract into database.' });
         }
-
-        // Decode filename correctly for use in editor config
-        const originalFilenameDecoded = iconv.decode(Buffer.from(req.file.originalname, 'binary'), 'utf-8');
         
         // Use the specific URL for Docker containers
         const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${req.file.filename}`;
@@ -92,7 +92,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
             document: {
                 fileType: 'docx',
                 key: documentKey,
-                title: originalFilenameDecoded, // Use decoded filename for a better user experience
+                title: newContract.original_filename, // Now using the clean name from the DB
                 url: fileUrl,
             },
             documentType: 'word',
@@ -179,12 +179,16 @@ router.post('/save-callback', async (req, res) => {
 // POST /api/contracts/analyze
 // Runs AI analysis using Ollama by reading the DOCX file
 router.post('/analyze', async (req, res) => {
-    // We now expect a more detailed payload
-    const { contractId, contractType, userPerspective, reviewPoints, corePurposes } = req.body;
+    // We now expect a more detailed payload that includes the full pre-analysis state
+    const { contractId, userPerspective, preAnalysisData } = req.body;
 
-    if (!contractId || !contractType || !userPerspective || !reviewPoints || !corePurposes) {
-        return res.status(400).json({ error: 'Incomplete analysis request. All parameters are required.' });
+    // Validate the new payload structure
+    if (!contractId || !userPerspective || !preAnalysisData || !preAnalysisData.contract_type || !preAnalysisData.suggested_review_points) {
+        return res.status(400).json({ error: 'Incomplete analysis request. A full preAnalysisData object is required.' });
     }
+    
+    // Extract details from the preAnalysisData object
+    const { contract_type: contractType, suggested_review_points: reviewPoints, core_purposes: corePurposes } = preAnalysisData;
 
     try {
         const contract = await db('contracts').where({ id: contractId }).first();
@@ -257,20 +261,18 @@ router.post('/analyze', async (req, res) => {
             analysisResult = JSON.parse(response.message.content);
         }
 
-        // Save analysis result to the database
-        await db('contracts')
-            .where({ id: contractId })
-            .update({
-                analysis_result: JSON.stringify(analysisResult),
-                pre_analysis_data: JSON.stringify(req.body), // Save the entire setup payload
-                perspective: userPerspective,
-                status: 'Reviewed'
-            });
+        // Before sending the response, update the database with the full context
+        await db('contracts').where({ id: contractId }).update({
+            status: 'Reviewed',
+            analysis_result: JSON.stringify(analysisResult),
+            pre_analysis_data: JSON.stringify(preAnalysisData), // Save the entire pre-analysis object
+            perspective: userPerspective, // Save the perspective used for this analysis
+        });
 
         res.json(analysisResult);
 
     } catch (error) {
-        console.error(`[ERROR] Analysis failed for contract ${contractId}:`, error);
+        console.error('Error during AI analysis:', error.message);
         if (error.response) {
             console.error('AI Provider Response:', error.response.data);
         }
@@ -279,80 +281,63 @@ router.post('/analyze', async (req, res) => {
 });
 
 // GET /api/contracts/:id
-// Gets all details for a specific contract to reconstruct the review state.
+// Fetches full details for a single contract, designed to hydrate the review page
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
-    console.log(`[DIAGNOSTICS] Received request for contract details with ID: ${id} (Type: ${typeof id})`);
-    try {
-        const contract = await db('contracts').where({ id: parseInt(id, 10) }).first();
-        console.log('[DIAGNOSTICS] Database query result for contract:', contract);
 
-        if (!contract) {
-            console.error(`[DIAGNOSTICS] Query for contract with ID ${id} returned nothing. Not found.`);
+    try {
+        const contractRecord = await db('contracts').where({ id }).first();
+        if (!contractRecord) {
             return res.status(404).json({ error: 'Contract not found' });
         }
 
-        // We need to reconstruct the state as it was on the review page.
-        // This means we need the pre-analysis data, final analysis, perspective, etc.
-        // For simplicity, we'll assume these are stored in the analysis_result JSON
-        // or in separate fields. Here, we retrieve the main analysis result and perspective.
-        // A more robust solution might store the pre-analysis data as well.
-
-        const analysisResult = JSON.parse(contract.analysis_result || '{}');
-        const perspective = contract.perspective;
-        const documentKey = contract.document_key;
-        const preAnalysisPayload = JSON.parse(contract.pre_analysis_data || '{}');
-
-        // Decode filename from DB correctly
-        const originalFilenameDecoded = iconv.decode(Buffer.from(contract.original_filename, 'binary'), 'utf-8');
+        // The pre-analysis data and analysis results are stored as JSON strings
+        const preAnalysisData = contractRecord.pre_analysis_data ? JSON.parse(contractRecord.pre_analysis_data) : {};
+        const reviewData = contractRecord.analysis_result ? JSON.parse(contractRecord.analysis_result) : {};
         
-        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${path.basename(contract.storage_path)}`;
+        // Use the specific URL for Docker containers
+        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${path.basename(contractRecord.storage_path)}`;
         const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
+        
+        console.log(`[DEBUG] Re-generating file URL for history view: ${fileUrl}`);
 
         const payloadObject = {
             document: {
-                fileType: "docx",
-                key: documentKey,
-                title: originalFilenameDecoded,
+                fileType: 'docx',
+                key: contractRecord.document_key,
+                title: contractRecord.original_filename,
                 url: fileUrl,
             },
             documentType: 'word',
             editorConfig: {
                 callbackUrl: callbackUrl,
-                lang: "zh-CN",
-                mode: "edit",
-                user: {
-                    id: `user-${contract.user_id || 'unknown'}`,
-                    name: "Reviewer"
-                },
-                customization: {
-                    forcesave: true,
-                },
+                mode: 'edit',
+                user: { id: `user-${contractRecord.user_id}`, name: 'Reviewer' },
+                 customization: { forcesave: true },
             },
         };
 
         const token = jwt.sign(payloadObject, ONLYOFFICE_JWT_SECRET);
-        const editorConfigWithToken = { ...payloadObject, token: token };
+        const editorConfigWithToken = { ...payloadObject, token };
 
-        const contractState = {
-            contract: { id: contract.id, original_filename: originalFilenameDecoded, editorConfig: editorConfigWithToken },
-            reviewData: analysisResult,
-            perspective: perspective,
-            preAnalysisData: { 
-                contract_type: preAnalysisPayload.contractType || '未知', 
-                potential_parties: [perspective, ...(preAnalysisPayload.potential_parties || [])].filter((v, i, a) => a.indexOf(v) === i),
-                suggested_review_points: preAnalysisPayload.reviewPoints || [], 
-                suggested_core_purposes: preAnalysisPayload.corePurposes || [] 
+        res.json({
+            contract: {
+                id: contractRecord.id,
+                original_filename: contractRecord.original_filename,
+                editorConfig: editorConfigWithToken,
             },
-            selectedReviewPoints: preAnalysisPayload.reviewPoints || [], 
-            customPurposes: (preAnalysisPayload.corePurposes || []).map(p => ({value: p})),
-        };
-
-        res.json(contractState);
+            preAnalysisData: preAnalysisData,
+            reviewData: reviewData,
+            perspective: contractRecord.perspective,
+            // We need to construct these based on the saved pre-analysis data
+            // This part might need adjustment if the saved preAnalysisData doesn't contain all required fields.
+            selectedReviewPoints: preAnalysisData.reviewPoints || [],
+            customPurposes: preAnalysisData.core_purposes ? preAnalysisData.core_purposes.map(p => ({ value: p })) : [],
+        });
 
     } catch (error) {
-        console.error(`[ERROR] Failed to get contract details for ${id}:`, error);
-        res.status(500).json({ error: 'Failed to retrieve contract details.' });
+        console.error(`[ERROR] Failed to fetch contract details for id ${id}:`, error);
+        res.status(500).json({ error: 'Server error while fetching contract details.' });
     }
 });
 

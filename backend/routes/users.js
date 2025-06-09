@@ -30,23 +30,24 @@ router.post('/identify', async (req, res) => {
 router.get('/:userId/history', async (req, res) => {
     const { userId } = req.params;
     if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+        return res.status(400).json({ error: 'User ID is required.' });
     }
     try {
-        const history = await db('contracts')
+        const contracts = await db('contracts')
             .where({ user_id: userId })
             .select('id', 'original_filename', 'status', 'created_at')
             .orderBy('created_at', 'desc');
+            console.debug(contracts);
         
-        // Manually decode filenames from binary buffer to UTF-8 string
-        const decodedHistory = history.map(item => ({
-            ...item,
-            original_filename: iconv.decode(Buffer.from(item.original_filename, 'binary'), 'utf-8')
+        // Decode filenames before sending to the client
+        const history = contracts.map(c => ({
+            ...c,
+            original_filename: c.original_filename
         }));
         
-        res.json(decodedHistory);
+        res.json(history);
     } catch (error) {
-        console.error(`[ERROR] Failed to get history for user ${userId}:`, error);
+        console.error(`Error fetching history for user ${userId}:`, error);
         res.status(500).json({ error: 'Failed to retrieve history.' });
     }
 });

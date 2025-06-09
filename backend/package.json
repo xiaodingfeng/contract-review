@@ -4,7 +4,9 @@
   "description": "Backend for ContractGE application",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
@@ -22,10 +24,10 @@
     "openai": "^4.52.0",
     "sqlite3": "^5.1.7",
     "unidecode": "^0.1.8",
-    "uuid": "^9.0.1"
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.20",
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.4"
   }
 } 
