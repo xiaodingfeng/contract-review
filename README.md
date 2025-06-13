@@ -17,7 +17,7 @@ Contract General Expert - 一款合同审查AI应用 (Contract View)。
 - **后端**: Node.js + Express
 - **数据库**: SQLite
 - **office在线**: onlyoffice
-
+- **本地小模型**：deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
 
 ## 项目启动
 

@@ -200,24 +200,27 @@ router.post('/analyze', async (req, res) => {
 
         const analyzePrompt = `
         你是一名资深法务专家，你的任务是根据用户提供的审查框架，对一份合同进行深度、定制化的审查。
-
+        
         **审查框架:**
-        1.  **合同类型:** ${contractType}
-        2.  **我的立场:** ${userPerspective}
-        3.  **我重点关注的审查点:**
+        **合同类型:** ${contractType}
+        **我的立场:** ${userPerspective}
+        **我重点关注的审查点:**
             - ${reviewPoints.join('\n            - ')}
-        4.  **我希望达成的核心审查目的:**
+        **我希望达成的核心审查目的:**
             - ${corePurposes.join('\n            - ')}
-
-        **你的任务:**
+            
+        **审查要求:**
         请严格围绕上述框架，对以下合同文本进行全面分析。你的分析报告需要清晰、专业，并直接回应我关注的每一个审查点和核心目的。请将你的分析结果，严格按照下面的JSON格式返回，不需要任何额外的解释或开场白。
         **特别指示：** "修改建议"是你本次分析的核心产出之一。请你主动、全面地审查合同全文，找出所有你认为可以改进的条款，并尽可能多地提供具体的修改建议。不要局限于用户选择的审查点。
-        输出格式字段描述：
-        dispute_points：审查点
-        missing_clauses：补充条款
-        party_review：主体检查
-        modification_suggestions：修改建议
-        **输出格式 (JSON):**
+        1. 仅输出一个纯JSON对象，禁止包含任何自然语言解释、标题或额外文
+        2. 不要添加解释性文字、开场白或结束语
+        3. 如果某项审查结果为空，请返回空数组
+        4. 每个字段的描述必须完整且专业
+        5. 如违反格式要求，必须重新生成
+        6. 所有字段必须使用英文命名且保持如下大小写：dispute_points, missing_clauses, party_review, modification_suggestions
+        7. 每个字段必须是数组类型（即使只有一项或空数组）
+
+        **输出格式(JSON):**
         {
           "dispute_points": [
             {
@@ -246,7 +249,20 @@ router.post('/analyze', async (req, res) => {
             }
           ]
         }
-        
+        输出字段描述：
+            dispute_points：审查点
+            missing_clauses：补充条款
+            party_review：主体检查
+            modification_suggestions：修改建议
+        **特别指令:**
+        - 不要添加任何JSON格式之外的文字
+        - 确保所有特殊字符正确转义
+        - 数组元素尽可能多
+        - 基于合同原文逐点分析，不添加未提及内容
+        - 如无相关内容，返回空数组（例如："dispute_points": []）
+        - modification_suggestions必须包含原文具体位置的行号或段落标识
+        - 所有描述使用法律术语，禁止口语化表达
+
         **合同原文:**
         ---
         ${plainText}
@@ -255,33 +271,34 @@ router.post('/analyze', async (req, res) => {
 
         const aiProvider = process.env.AI_PROVIDER || 'siliconflow';
 
-        let chatCompletion;
         let analysisResult;
-
+        let httpData;
         if (aiProvider === 'siliconflow') {
-            chatCompletion = await siliconflow.chat.completions.create({
-                model: "deepseek-ai/DeepSeek-V3",
+            const chatCompletion = await siliconflow.chat.completions.create({
+                model: process.env.SILICONFLOW_MODEL || "deepseek-ai/DeepSeek-V3",
                 messages: [{ role: "user", content: analyzePrompt }],
                 response_format: { type: "json_object" },
             });
-            analysisResult = JSON.parse(chatCompletion.choices[0].message.content);
+            httpData = chatCompletion.choices[0].message.content;
         } else { // ollama
-            console.log(analyzePrompt)
             const response = await fetch(process.env.OLLAMA_GENERATE_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: "deepseek-r1:32b",
+                    model: process.env.OLLAMA_GENERATE_MODEL || "deepseek-r1:32b",
                     prompt: analyzePrompt,
                     stream: false
                 })
             });
-            const data = await response.json();
-            const cleanJson = data.response.replace(/<think>[\s\S]*<\/think>/, "").trim();
-            const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
-            analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
+            httpData = await response.json().response;
         }
-
+        let cleanJson = httpData.replace(/<think>[\s\S]*<\/think>/, "").trim();
+        const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
+        if (!jsonMatch) {
+            cleanJson = cleanJson.replace('```json', "").trim();
+            cleanJson = cleanJson.replace('```', "").trim();
+        }
+        analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
         // Before sending the response, update the database with the full context
         await db('contracts').where({ id: contractId }).update({
             status: 'Reviewed',
@@ -438,29 +455,33 @@ router.post('/pre-analyze', async (req, res) => {
         ---
         `;
         const aiProvider = process.env.AI_PROVIDER || 'siliconflow';
-        let analysisResult;
+        let httpData;
         if (aiProvider === 'siliconflow') {
             const chatCompletion = await siliconflow.chat.completions.create({
-                model: "deepseek-ai/DeepSeek-V3",
+                model: process.env.SILICONFLOW_MODEL || "deepseek-ai/DeepSeek-V3",
                 messages: [{ role: "user", content: preAnalyzePrompt }],
                 response_format: { type: "json_object" },
             });
-            analysisResult = JSON.parse(chatCompletion.choices[0].message.content);
+            httpData = chatCompletion.choices[0].message.content;
         } else { // ollama
             const response = await fetch(process.env.OLLAMA_GENERATE_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: "deepseek-r1:32b",
+                    model: process.env.OLLAMA_GENERATE_MODEL || "deepseek-r1:32b",
                     prompt: preAnalyzePrompt,
                     stream: false
                 })
             });
-            const data = await response.json();
-            const cleanJson = data.response.replace(/<think>[\s\S]*<\/think>/, "").trim();
-            const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
-            analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
+            httpData = await response.json().response;
         }
+        let cleanJson = httpData.replace(/<think>[\s\S]*<\/think>/, "").trim();
+        const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
+        if (!jsonMatch) {
+            cleanJson = cleanJson.replace('```json', "").trim();
+            cleanJson = cleanJson.replace('```', "").trim();
+        }
+        let analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
         res.json(analysisResult);
 
     } catch (error) {
