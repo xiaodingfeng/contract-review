@@ -79,11 +79,11 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (!newContract) {
             return res.status(500).json({ error: 'Failed to insert contract into database.' });
         }
-        
+
         // Use the specific URL for Docker containers
         const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${req.file.filename}`;
         const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
-        
+
         // Log the generated URL for diagnostics
         console.log(`[DEBUG] Generated file URL for OnlyOffice to download: ${fileUrl}`);
 
@@ -162,10 +162,10 @@ router.post('/save-callback', async (req, res) => {
                 writer.on('finish', resolve);
                 writer.on('error', reject);
             });
-            
+
             console.log(`[INFO] Document ${contract.original_filename} (key: ${documentKey}) updated successfully.`);
         }
-        
+
         res.status(200).json({ error: 0 }); // Must return { "error": 0 } for success
     } catch (error) {
         console.error('[ERROR] Save callback failed:', error);
@@ -186,7 +186,7 @@ router.post('/analyze', async (req, res) => {
     if (!contractId || !userPerspective || !preAnalysisData || !preAnalysisData.contract_type || !preAnalysisData.suggested_review_points) {
         return res.status(400).json({ error: 'Incomplete analysis request. A full preAnalysisData object is required.' });
     }
-    
+
     // Extract details from the preAnalysisData object
     const { contract_type: contractType, suggested_review_points: reviewPoints, core_purposes: corePurposes } = preAnalysisData;
 
@@ -200,20 +200,27 @@ router.post('/analyze', async (req, res) => {
 
         const analyzePrompt = `
         你是一名资深法务专家，你的任务是根据用户提供的审查框架，对一份合同进行深度、定制化的审查。
-
+        
         **审查框架:**
-        1.  **合同类型:** ${contractType}
-        2.  **我的立场:** ${userPerspective}
-        3.  **我重点关注的审查点:**
+        **合同类型:** ${contractType}
+        **我的立场:** ${userPerspective}
+        **我重点关注的审查点:**
             - ${reviewPoints.join('\n            - ')}
-        4.  **我希望达成的核心审查目的:**
+        **我希望达成的核心审查目的:**
             - ${corePurposes.join('\n            - ')}
-
-        **你的任务:**
+            
+        **审查要求:**
         请严格围绕上述框架，对以下合同文本进行全面分析。你的分析报告需要清晰、专业，并直接回应我关注的每一个审查点和核心目的。请将你的分析结果，严格按照下面的JSON格式返回，不需要任何额外的解释或开场白。
         **特别指示：** "修改建议"是你本次分析的核心产出之一。请你主动、全面地审查合同全文，找出所有你认为可以改进的条款，并尽可能多地提供具体的修改建议。不要局限于用户选择的审查点。
+        1. 仅输出一个纯JSON对象，禁止包含任何自然语言解释、标题或额外文
+        2. 不要添加解释性文字、开场白或结束语
+        3. 如果某项审查结果为空，请返回空数组
+        4. 每个字段的描述必须完整且专业
+        5. 如违反格式要求，必须重新生成
+        6. 所有字段必须使用英文命名且保持如下大小写：dispute_points, missing_clauses, party_review, modification_suggestions
+        7. 每个字段必须是数组类型（即使只有一项或空数组）
 
-        **输出格式 (JSON):**
+        **输出格式(JSON):**
         {
           "dispute_points": [
             {
@@ -242,7 +249,20 @@ router.post('/analyze', async (req, res) => {
             }
           ]
         }
-        
+        输出字段描述：
+            dispute_points：审查点
+            missing_clauses：补充条款
+            party_review：主体检查
+            modification_suggestions：修改建议
+        **特别指令:**
+        - 不要添加任何JSON格式之外的文字
+        - 确保所有特殊字符正确转义
+        - 数组元素尽可能多
+        - 基于合同原文逐点分析，不添加未提及内容
+        - 如无相关内容，返回空数组（例如："dispute_points": []）
+        - modification_suggestions必须包含原文具体位置的行号或段落标识
+        - 所有描述使用法律术语，禁止口语化表达
+
         **合同原文:**
         ---
         ${plainText}
@@ -251,25 +271,34 @@ router.post('/analyze', async (req, res) => {
 
         const aiProvider = process.env.AI_PROVIDER || 'siliconflow';
 
-        let chatCompletion;
         let analysisResult;
-
+        let httpData;
         if (aiProvider === 'siliconflow') {
-            chatCompletion = await siliconflow.chat.completions.create({
-                model: "deepseek-ai/DeepSeek-V3",
+            const chatCompletion = await siliconflow.chat.completions.create({
+                model: process.env.SILICONFLOW_MODEL || "deepseek-ai/DeepSeek-V3",
                 messages: [{ role: "user", content: analyzePrompt }],
                 response_format: { type: "json_object" },
             });
-            analysisResult = JSON.parse(chatCompletion.choices[0].message.content);
+            httpData = chatCompletion.choices[0].message.content;
         } else { // ollama
-            const response = await ollama.chat({
-                model: "deepseek-v2",
-                messages: [{ role: "user", content: analyzePrompt }],
-                format: "json"
+            const response = await fetch(process.env.OLLAMA_GENERATE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: process.env.OLLAMA_GENERATE_MODEL || "deepseek-r1:32b",
+                    prompt: analyzePrompt,
+                    stream: false
+                })
             });
-            analysisResult = JSON.parse(response.message.content);
+            httpData = await response.json().response;
         }
-
+        let cleanJson = httpData.replace(/<think>[\s\S]*<\/think>/, "").trim();
+        const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
+        if (!jsonMatch) {
+            cleanJson = cleanJson.replace('```json', "").trim();
+            cleanJson = cleanJson.replace('```', "").trim();
+        }
+        analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
         // Before sending the response, update the database with the full context
         await db('contracts').where({ id: contractId }).update({
             status: 'Reviewed',
@@ -309,11 +338,11 @@ router.get('/:id', async (req, res) => {
         // The pre-analysis data and analysis results are stored as JSON strings
         const preAnalysisData = contractRecord.pre_analysis_data ? JSON.parse(contractRecord.pre_analysis_data) : {};
         const reviewData = contractRecord.analysis_result ? JSON.parse(contractRecord.analysis_result) : {};
-        
+
         // Use the specific URL for Docker containers
         const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${path.basename(contractRecord.storage_path)}`;
         const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
-        
+
         console.log(`[DEBUG] Re-generating file URL for history view: ${fileUrl}`);
 
         const payloadObject = {
@@ -381,7 +410,7 @@ router.delete('/:id', async (req, res) => {
 
         // Then, delete the record from the database
         await db('contracts').where({ id }).del();
-        
+
         console.log(`[INFO] Successfully deleted contract record with ID: ${id}`);
         res.status(200).json({ message: 'Contract deleted successfully.' });
 
@@ -425,19 +454,35 @@ router.post('/pre-analyze', async (req, res) => {
         ${plainText}
         ---
         `;
-
-        // Using SiliconFlow for this task as it's generally better at structured data extraction
-        const chatCompletion = await siliconflow.chat.completions.create({
-            model: "deepseek-ai/DeepSeek-V3",
-            messages: [{
-                role: "user",
-                content: preAnalyzePrompt,
-            }],
-            response_format: { type: "json_object" },
-        });
-
-        const preAnalysisResult = JSON.parse(chatCompletion.choices[0].message.content);
-        res.json(preAnalysisResult);
+        const aiProvider = process.env.AI_PROVIDER || 'siliconflow';
+        let httpData;
+        if (aiProvider === 'siliconflow') {
+            const chatCompletion = await siliconflow.chat.completions.create({
+                model: process.env.SILICONFLOW_MODEL || "deepseek-ai/DeepSeek-V3",
+                messages: [{ role: "user", content: preAnalyzePrompt }],
+                response_format: { type: "json_object" },
+            });
+            httpData = chatCompletion.choices[0].message.content;
+        } else { // ollama
+            const response = await fetch(process.env.OLLAMA_GENERATE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: process.env.OLLAMA_GENERATE_MODEL || "deepseek-r1:32b",
+                    prompt: preAnalyzePrompt,
+                    stream: false
+                })
+            });
+            httpData = await response.json().response;
+        }
+        let cleanJson = httpData.replace(/<think>[\s\S]*<\/think>/, "").trim();
+        const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
+        if (!jsonMatch) {
+            cleanJson = cleanJson.replace('```json', "").trim();
+            cleanJson = cleanJson.replace('```', "").trim();
+        }
+        let analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
+        res.json(analysisResult);
 
     } catch (error) {
         console.error(`[ERROR] Pre-analysis failed for contract ${contractId}:`, error);
@@ -465,4 +510,4 @@ router.get('/', async (req, res) => {
     }
 });
 
-module.exports = router; 
+module.exports = router;

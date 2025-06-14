@@ -2,18 +2,27 @@
 
 Contract General Expert - 一款合同审查AI应用 (Contract View)。
 
+## 预览
+![](img/home.png)
+![](img/step1.png)
+![](img/step2.png)
+![](img/step3-1.png)
+![](img/step3-2.png)
+![](img/step3-3.png)
+![](img/step3-4.png)
+![](img/step3-5.png)
 ## 技术栈
 
 - **前端**: Vue 3 + Element UI + TailWind CSS
 - **后端**: Node.js + Express
 - **数据库**: SQLite
 - **office在线**: onlyoffice
-
+- **本地小模型**：deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
 
 ## 项目启动
 
 ### 启动onlyoffice
-> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=false --restart=always onlyoffice/documentserver
+> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=true -e JWT_SECRET=3589dfhjjfdgk --restart=always onlyoffice/documentserver
 
 
 ### 1. 启动后端服务

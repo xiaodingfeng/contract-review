@@ -30,7 +30,7 @@
     <div v-if="activeStep === 0" class="flex-grow flex flex-col items-center justify-center py-8 px-4 text-center">
       <h1 class="text-3xl font-bold tracking-tight text-text-dark sm:text-4xl">智能合同审查</h1>
       <p class="mt-3 text-base leading-7 text-text-light">上传您的合同文档，AI 将为您深度分析、识别风险、守护权益。</p>
-      
+
       <div class="mt-10 w-full max-w-2xl">
         <el-upload
           class="upload-dragger"
@@ -68,7 +68,7 @@
                 <h3 class="text-lg font-semibold text-text-dark">1. 选择您的审查立场</h3>
                 <p class="text-sm text-text-light mt-1">AI将基于您的立场进行侧重分析。</p>
                 <div class="mt-4">
-                    <el-select v-model="perspective" placeholder="请选择您的立场" class="w-full">
+                    <el-select v-model="perspective" placeholder="请选择您的立场" class="w-full"  filterable allow-create>
                         <el-option
                         v-for="party in allPotentialParties"
                         :key="party"
@@ -102,9 +102,9 @@
             <div class="mb-6">
                 <h4 class="text-md font-medium text-text-dark mb-2">审查点选择 (可多选)</h4>
                 <el-checkbox-group v-model="selectedReviewPoints" class="flex flex-wrap gap-3">
-                    <el-checkbox 
-                    v-for="point in allSuggestedReviewPoints" 
-                    :key="point" 
+                    <el-checkbox
+                    v-for="point in allSuggestedReviewPoints"
+                    :key="point"
                     :label="point"
                     border
                     ></el-checkbox>
@@ -132,7 +132,7 @@
         </div>
       </div>
     </div>
-    
+
     <!-- Step 2: Review & Edit -->
     <div v-if="activeStep === 2" class="flex-grow flex space-x-4">
         <!-- Left Side: OnlyOffice Editor -->
@@ -146,7 +146,7 @@
                 class="h-full"
             />
         </div>
-        
+
         <!-- Right Side: AI Review Panel -->
         <div class="w-1/3 bg-white rounded-lg shadow-md flex flex-col">
             <!-- Panel Header -->
@@ -270,8 +270,8 @@
                             </button>
                         </div>
                         <div class="pt-4">
-                            <button 
-                                @click="startReAnalysis" 
+                            <button
+                                @click="startReAnalysis"
                                 :disabled="!perspective || selectedReviewPoints.length === 0 || reAnalyzing"
                                 class="w-full px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -354,6 +354,7 @@ export default {
         const isDocx = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
         if (!isDocx) {
             ElMessage.error('只能上传 DOCX 格式的文件！');
+            return false;
         }
         loading.value = true;
         loadingMessage.value = '正在上传并为您准备编辑器...';
@@ -364,7 +365,7 @@ export default {
         contract.id = res.contractId;
         contract.editorConfig = res.editorConfig;
         contract.original_filename = res.editorConfig.document.title;
-        
+
         // Start pre-analysis immediately after upload
         loading.value = true;
         loadingMessage.value = 'AI正在进行初步分析，请稍候...';
@@ -419,12 +420,12 @@ export default {
         console.log('[DEBUG] goBackToUpload clicked.');
         resetState();
     };
-    
+
     const goBackToConfirm = () => {
       activeStep.value = 1;
       isEditorReady.value = false;
     };
-    
+
     const startAnalysis = async () => {
         if (!perspective.value) {
             ElMessage.warning('请输入您的审查立场。');
@@ -518,7 +519,7 @@ export default {
         try {
             // This endpoint needs to be created in the backend
             // It should return the full state needed for the review page
-            const response = await api.getContractDetails(contractId); 
+            const response = await api.getContractDetails(contractId);
             const contractData = response.data;
 
             // Populate all the relevant states from the fetched data
@@ -535,7 +536,7 @@ export default {
             selectedReviewPoints.value = contractData.selectedReviewPoints || [];
             customPurposes.value = contractData.customPurposes || [{ value: '' }];
             Object.assign(reviewData, contractData.reviewData || {});
-            
+
             // Save this loaded state to localStorage so a refresh works correctly
             saveState();
 
@@ -585,10 +586,10 @@ export default {
     // Watch for any state changes and save them
     watch([activeStep, perspective, activeAiTab], saveState);
     watch([
-        contract, 
-        preAnalysisData, 
-        reviewData, 
-        selectedReviewPoints, 
+        contract,
+        preAnalysisData,
+        reviewData,
+        selectedReviewPoints,
         customPurposes,
         allSuggestedReviewPoints,
         allPotentialParties,
@@ -603,7 +604,7 @@ export default {
                 if (savedState.contract && savedState.contract.id) {
                     loading.value = true;
                     loadingMessage.value = '正在恢复您的会话...';
-                    
+
                     try {
                         // Fetch fresh contract editorConfig from the server to get a new, valid token.
                         const response = await api.getContractDetails(savedState.contract.id);
@@ -612,16 +613,16 @@ export default {
                         // Restore UI state from localStorage, as it's the source of truth for user's work.
                         activeStep.value = savedState.activeStep;
                         activeAiTab.value = savedState.activeAiTab || 'suggestions';
-                        
+
                         // Restore data objects from savedState
                         Object.assign(contract, savedState.contract);
                         // CRITICAL: Overwrite with the fresh editor config from the server.
                         contract.editorConfig = serverEditorConfig;
-                        
+
                         perspective.value = savedState.perspective;
                         Object.assign(preAnalysisData, savedState.preAnalysisData || {});
                         Object.assign(reviewData, savedState.reviewData || {});
-                        
+
                         // Restore lists from savedState
                         selectedReviewPoints.value = savedState.selectedReviewPoints || [];
                         customPurposes.value = savedState.customPurposes || [{ value: '' }];
@@ -676,7 +677,7 @@ export default {
     // This is the correct guard for handling navigation that reuses the same component instance.
     onBeforeRouteUpdate((to, from) => {
       console.log(`[DEBUG] onBeforeRouteUpdate: from ${from.fullPath} to ${to.fullPath}`);
-      // When navigating from a history-loaded review page (which has a contract_id) 
+      // When navigating from a history-loaded review page (which has a contract_id)
       // back to the main 'start' page (which does not), we must reset the entire state
       // to ensure a completely fresh start.
       if (from.query.contract_id && !to.query.contract_id) {
@@ -802,4 +803,4 @@ export default {
 .upload-dragger .el-upload-dragger:hover {
   @apply border-primary;
 }
-</style> 
+</style>
