@@ -2,13 +2,15 @@ version: '3.8'
 
 services:
   backend:
-    build: .
+#    build: . # 注释掉或删除这一行，如果不再需要构建
+    image: contractge-backend
     container_name: contractge-backend
     ports:
       - "3000:3000"
     volumes:
       - ./uploads:/app/uploads
       - ./.env:/app/.env
+      - ./contracts.db:/app/contracts.db
     environment:
       - NODE_ENV=production
     restart: unless-stopped
