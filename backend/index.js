@@ -11,7 +11,7 @@ const db = require('./database');
 const resetAndRebuildDatabase = require('./database-check');
 
 const app = express();
-const port = 3000;
+const port = 8688;
 
 // Middleware
 app.use(cors());
@@ -26,7 +26,7 @@ if (!fs.existsSync(publicDir)) {
 app.use(express.static(publicDir));
 
 // Serve static files from the "uploads" directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API Routes
 app.use('/api/contracts', contractRoutes);
@@ -44,4 +44,4 @@ async function startServer() {
   });
 }
 
-startServer(); 
+startServer();

@@ -22,7 +22,7 @@ Contract General Expert - 一款合同审查AI应用 (Contract View)。
 ## 项目启动
 
 ### 启动onlyoffice
-> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=true -e JWT_SECRET=3589dfhjjfdgk --restart=always onlyoffice/documentserver
+> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=true -e JWT_SECRET=fsdftertrt34768586sfhjsdhfjhhjfsuhaiubue --restart=always onlyoffice/documentserver
 
 
 ### 1. 启动后端服务

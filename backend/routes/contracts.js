@@ -81,7 +81,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         }
 
         // Use the specific URL for Docker containers
-        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${req.file.filename}`;
+        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/uploads/${req.file.filename}`;
         const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
 
         // Log the generated URL for diagnostics
@@ -290,8 +290,10 @@ router.post('/analyze', async (req, res) => {
                     stream: false
                 })
             });
-            httpData = await response.json().response;
+            const result = await response.json();
+            httpData = result.response;
         }
+        console.log(httpData)
         let cleanJson = httpData.replace(/<think>[\s\S]*<\/think>/, "").trim();
         const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
         if (!jsonMatch) {
@@ -473,8 +475,10 @@ router.post('/pre-analyze', async (req, res) => {
                     stream: false
                 })
             });
-            httpData = await response.json().response;
+            const result = await response.json();
+            httpData = result.response;
         }
+        console.log(httpData)
         let cleanJson = httpData.replace(/<think>[\s\S]*<\/think>/, "").trim();
         const jsonMatch = cleanJson.match(/```json\n([\s\S]*?)\n```/);
         if (!jsonMatch) {

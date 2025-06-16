@@ -44,6 +44,12 @@
                 </td>
                 <td class="py-4 px-6 text-right text-sm font-medium">
                   <button @click="viewReport(item.id)" class="text-primary hover:text-primary-dark">查看报告</button>
+                  <el-popconfirm title="确认删除?" @confirm="deleteReport(item.id)">
+                    <template #reference>
+                      <button class="text-primary hover:text-primary-dark ml-5">删除</button>
+                    </template>
+                  </el-popconfirm>
+
                 </td>
               </tr>
             </tbody>
@@ -59,6 +65,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
 import { getUserId } from '../user';
+import {ElMessage} from "element-plus";
 
 export default {
   name: 'HomeView',
@@ -100,7 +107,14 @@ export default {
     const viewReport = (contractId) => {
       router.push({ path: '/review', query: { contract_id: contractId } });
     };
-
+    const deleteReport = (contractId) => {
+      api.deleteContract(contractId).then(v => {
+        if (v.status !== 200) {
+          ElMessage.error(v.statusText);
+        }
+        fetchHistory()
+      })
+    };
     const startNewReview = () => {
       localStorage.removeItem('review_session');
       router.push({ path: '/review' });
@@ -117,6 +131,7 @@ export default {
       formatDate,
       getStatusClass,
       viewReport,
+      deleteReport,
       startNewReview
     };
   }
@@ -128,4 +143,4 @@ export default {
   text-align: center;
   padding: 50px;
 }
-</style> 
+</style>
