@@ -81,7 +81,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         }
 
         // Use the specific URL for Docker containers
-        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/uploads/${req.file.filename}`;
+        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/uploads/${path.basename(req.file.path)}`;
         const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
 
         // Log the generated URL for diagnostics
@@ -342,7 +342,7 @@ router.get('/:id', async (req, res) => {
         const reviewData = contractRecord.analysis_result ? JSON.parse(contractRecord.analysis_result) : {};
 
         // Use the specific URL for Docker containers
-        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/uploads/${path.basename(contractRecord.storage_path)}`;
+        const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/uploads/${path.basename(contractRecord.storage_path)}`;
         const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
 
         console.log(`[DEBUG] Re-generating file URL for history view: ${fileUrl}`);
@@ -486,8 +486,12 @@ router.post('/pre-analyze', async (req, res) => {
             cleanJson = cleanJson.replace('```', "").trim();
         }
         let analysisResult = jsonMatch ? JSON.parse(jsonMatch[1]) : JSON.parse(cleanJson);
+        // Before sending the response, update the database with the full context
+        await db('contracts').where({ id: contractId }).update({
+            status: 'PreAnalyzed',
+            pre_analysis_data: JSON.stringify(analysisResult), // Save the entire pre-analysis object
+        });
         res.json(analysisResult);
-
     } catch (error) {
         console.error(`[ERROR] Pre-analysis failed for contract ${contractId}:`, error);
         res.status(500).json({ error: '预分析失败，请稍后重试。' });
