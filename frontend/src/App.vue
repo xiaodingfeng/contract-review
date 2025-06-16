@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="flex-shrink-0 bg-white border-b border-border-color shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-12">
+            <div class="flex items-center justify-between h-9">
                 <router-link to="/" class="flex items-center no-underline">
                     <div class="flex-shrink-0 text-primary font-bold text-lg flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -17,7 +17,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="flex-grow p-4">
+    <main class="flex-grow pl-4 pr-4">
        <router-view></router-view>
     </main>
   </div>
@@ -56,4 +56,4 @@ body {
 .nav-link-active {
     @apply bg-primary-light text-primary-dark;
 }
-</style> 
+</style>

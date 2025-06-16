@@ -1,10 +1,10 @@
 <template>
-  <div class="space-y-8">
+  <div class="space-y-4">
     <!-- Hero Section -->
-    <div class="text-center py-12 bg-white rounded-lg shadow-md">
+    <div class="text-center py-3 bg-white rounded-lg shadow-md">
       <h1 class="text-4xl font-bold tracking-tight text-text-dark sm:text-5xl">您的智能合同审查伙伴</h1>
       <p class="mt-4 max-w-2xl mx-auto text-lg leading-8 text-text-light">上传合同，AI 助您深度分析、识别风险、守护权益。一键开启专业、高效的审查之旅。</p>
-      <div class="mt-10">
+      <div class="mt-4">
         <button @click="startNewReview" class="px-8 py-3 text-base font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
           开始审查
         </button>
@@ -13,17 +13,17 @@
 
     <!-- History List Section -->
     <div class="bg-white rounded-lg shadow-md">
-      <div class="p-6 border-b border-border-color">
+      <div class="p-3 border-b border-border-color">
         <h2 class="text-xl font-semibold text-text-dark">最近的审查历史</h2>
       </div>
-      <div class="p-6">
+      <div class="p-3">
         <div v-if="loading" class="text-center text-text-light">正在加载历史记录...</div>
         <div v-else-if="error" class="text-center text-danger">{{ error }}</div>
         <div v-else-if="history.length === 0" class="text-center text-text-light py-8">
           <p>您还没有任何审查记录。</p>
           <p class="mt-2 text-sm">点击上方的"开始审查"按钮，上传您的第一份合同吧！</p>
         </div>
-        <div v-else class="overflow-y-auto max-h-[60vh]">
+        <div v-else class="overflow-y-auto max-h-[50vh]">
           <table class="min-w-full divide-y divide-border-color">
             <thead class="bg-bg-subtle sticky top-0">
               <tr>

@@ -136,21 +136,21 @@
     <!-- Step 2: Review & Edit -->
     <div v-if="activeStep === 2" class="flex-grow flex space-x-4">
         <!-- Left Side: OnlyOffice Editor -->
-        <div class="w-2/3 bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="w-2/3 bg-white rounded-lg shadow-md overflow-hidden h-[calc(100vh-85px)]">
             <DocumentEditor
                 v-if="contract.editorConfig"
-                id="docEditor"
+                id="docEditorComponent"
                 ref="docEditorComponent"
                 :documentServerUrl="onlyOfficeUrl"
                 :config="contract.editorConfig"
-                class="h-full"
+                :events_onDocumentReady="onDocumentReady"
             />
         </div>
 
         <!-- Right Side: AI Review Panel -->
-        <div class="w-1/3 bg-white rounded-lg shadow-md flex flex-col">
+        <div class="w-1/3 bg-white rounded-lg shadow-md flex flex-col h-[calc(100vh-85px)]">
             <!-- Panel Header -->
-            <div class="p-4 border-b border-border-color flex justify-between items-center flex-shrink-0">
+            <div class="p-1 border-b border-border-color flex justify-between items-center flex-shrink-0">
                 <h3 class="text-lg font-semibold text-text-dark">AI 审查报告</h3>
                 <div>
                     <template v-if="cameFromHistory">
@@ -166,16 +166,16 @@
             <!-- Tab Navigation -->
             <div class="px-4 border-b border-border-color flex-shrink-0">
                 <nav class="-mb-px flex space-x-6">
-                    <button @click="activeAiTab = 'suggestions'" :class="[activeAiTab === 'suggestions' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">修改建议</button>
-                    <button @click="activeAiTab = 'disputes'" :class="[activeAiTab === 'disputes' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">争议焦点</button>
-                    <button @click="activeAiTab = 'missing'" :class="[activeAiTab === 'missing' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">缺失条款</button>
-                    <button @click="activeAiTab = 'parties'" :class="[activeAiTab === 'parties' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">主体审查</button>
-                    <button @click="activeAiTab = 're-review'" :class="[activeAiTab === 're-review' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">重审</button>
+                    <button @click="activeAiTab = 'suggestions'" :class="[activeAiTab === 'suggestions' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">修改建议</button>
+                    <button @click="activeAiTab = 'disputes'" :class="[activeAiTab === 'disputes' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">争议焦点</button>
+                    <button @click="activeAiTab = 'missing'" :class="[activeAiTab === 'missing' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">缺失条款</button>
+                    <button @click="activeAiTab = 'parties'" :class="[activeAiTab === 'parties' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">主体审查</button>
+                    <button @click="activeAiTab = 're-review'" :class="[activeAiTab === 're-review' ? 'border-primary text-primary' : 'border-transparent text-text-light hover:text-text-main hover:border-gray-300']" class="whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">重审</button>
                 </nav>
             </div>
 
             <!-- Tab Content -->
-            <div class="p-6 overflow-y-auto flex-grow">
+            <div class="p-3 overflow-y-auto flex-grow">
                 <!-- Dispute Points -->
                 <div v-if="activeAiTab === 'disputes'">
                     <div v-if="reviewData.dispute_points && reviewData.dispute_points.length > 0" class="space-y-4">
@@ -467,18 +467,10 @@ export default {
     const removePurpose = (index) => {
       customPurposes.value.splice(index, 1);
     };
-
-    // Watch for the editor instance to become available
-    watch(() => docEditorComponent.value?.editor, (newEditor) => {
-        if (newEditor) {
-            console.log("[INFO] Editor instance via watcher is now available.");
-            isEditorReady.value = true;
-            // Force scroll to top after editor loads to prevent layout shift jumping
-            nextTick(() => {
-                window.scrollTo(0, 0);
-            });
-        }
-    });
+    const onDocumentReady = () => {
+      console.log("[INFO] Editor instance via watcher is now available.");
+      isEditorReady.value = true;
+    };
 
     const startReAnalysis = async () => {
       if (!perspective.value) {
@@ -739,6 +731,7 @@ export default {
       allSuggestedReviewPoints,
       allPotentialParties,
       querySearchCorePurposes,
+      onDocumentReady
     };
   }
 };
