@@ -2,6 +2,7 @@
 
 Contract General Expert - 一款合同审查AI应用 (Contract View)。
 
+演示站 [ http://contract.fengzhengx.cn/ ]
 ## 预览
 ![](img/home.png)
 ![](img/step1.png)
