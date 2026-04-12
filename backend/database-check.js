@@ -1,8 +1,20 @@
 const db = require('./database');
+const { ensureVectorStore, seedLawsFromMarkdown, seedCasesFromJson } = require('./services/vectorStore');
 
 async function resetAndRebuildDatabase() {
   console.log('[DB Init] Starting database schema verification and rebuild...');
   try {
+    const hasUsersTable = await db.schema.hasTable('users');
+    if (!hasUsersTable) {
+        console.log('[DB Init] Creating new `users` table...');
+        await db.schema.createTable('users', (table) => {
+            table.increments('id').primary();
+            table.string('fingerprint_id').notNullable().unique();
+            table.timestamps(true, true);
+        });
+        console.log('[DB Init] New `users` table created successfully.');
+    }
+
     const hasContractsTable = await db.schema.hasTable('contracts');
     
     if (hasContractsTable) {
@@ -28,16 +40,24 @@ async function resetAndRebuildDatabase() {
       console.log('[DB Init] New `contracts` table created successfully. Schema is now up-to-date.');
     }
 
-    const hasUsersTable = await db.schema.hasTable('users');
-    if (!hasUsersTable) {
-        console.log('[DB Init] Creating new `users` table...');
-        await db.schema.createTable('users', (table) => {
+    const hasQaHistoryTable = await db.schema.hasTable('qa_history');
+    if (!hasQaHistoryTable) {
+        console.log('[DB Init] Creating new `qa_history` table...');
+        await db.schema.createTable('qa_history', (table) => {
             table.increments('id').primary();
-            table.string('fingerprint_id').notNullable().unique();
+            table.string('session_id').notNullable().index();
+            table.string('role').notNullable();
+            table.text('content').notNullable();
+            table.integer('contract_id').unsigned().references('id').inTable('contracts').onDelete('SET NULL');
             table.timestamps(true, true);
         });
-        console.log('[DB Init] New `users` table created successfully.');
+        console.log('[DB Init] New `qa_history` table created successfully.');
     }
+
+    await ensureVectorStore();
+    await seedLawsFromMarkdown();
+    await seedCasesFromJson();
+    console.log('[DB Init] Vector knowledge index is ready.');
 
   } catch (error) {
     console.error("[DB Init] FATAL: Failed to rebuild database schema:", error);

@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Review from '../views/Review.vue'
-import Home from '../views/Home.vue'
-import QnA from '../views/QnA.vue'
-import Settings from '../views/Settings.vue'
+
+const Home = () => import('../views/Home.vue')
+const Review = () => import('../views/Review.vue')
+const QnA = () => import('../views/QnA.vue')
+const Settings = () => import('../views/Settings.vue')
 
 const routes = [
   {

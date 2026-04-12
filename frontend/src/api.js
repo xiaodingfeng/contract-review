@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getUserId } from './user'; // Assuming user.js is in the same src directory
 
 const apiClient = axios.create({
-    baseURL: process.env.VUE_APP_BACKEND_API_URL || 'http://localhost:3000/api', // Added a fallback
+    baseURL: (import.meta.env.VITE_APP_BACKEND_API_URL || 'http://localhost:3000') + '/api',
     headers: {
         'Content-Type': 'application/json'
     }
@@ -37,6 +37,22 @@ export default {
         return apiClient.post('/contracts/analyze', payload);
     },
 
+    reviewSelectedText(payload) {
+        return apiClient.post('/contracts/review-text', payload);
+    },
+
+    replaceContractText(contractId, payload) {
+        return apiClient.post(`/contracts/${contractId}/replace-text`, payload);
+    },
+
+    getFreshEditorConfig(contractId) {
+        return apiClient.get(`/contracts/${contractId}/editor-config`);
+    },
+
+    forceSaveContract(contractId, payload = {}) {
+        return apiClient.post(`/contracts/${contractId}/force-save`, payload);
+    },
+
     getHistory() {
         return apiClient.get('/contracts/history');
     },
@@ -60,5 +76,55 @@ export default {
     deleteContract(contractId) {
         // The interceptor will handle adding the user ID header for any potential backend checks
         return apiClient.delete(`/contracts/${contractId}`);
+    },
+
+    getContractHistory() {
+        return apiClient.get('/contracts');
+    },
+
+    getQAHistory(sessionId) {
+        return apiClient.get(`/qa/history/${sessionId}`);
+    },
+
+    askQA(data) {
+        return apiClient.post('/qa/ask', data);
+    },
+
+    getQaStreamUrl() {
+        return `${apiClient.defaults.baseURL}/qa/ask-stream`;
+    },
+
+    searchKnowledge(query = '', params = {}) {
+        return apiClient.get('/knowledge/search', { params: { q: query, ...params } });
+    },
+
+    listKnowledge(params = {}) {
+        return apiClient.get('/knowledge/list', { params });
+    },
+
+    importKnowledge(laws) {
+        return apiClient.post('/knowledge/import', { laws });
+    },
+
+    batchImportKnowledge(formData) {
+        return apiClient.post('/knowledge/batch-import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    },
+
+    deleteKnowledge(payload) {
+        return apiClient.delete('/knowledge', { data: payload });
+    },
+
+    deleteKnowledgeById(id) {
+        return apiClient.delete(`/knowledge/${id}`);
+    },
+
+    downloadKnowledgeTemplate(type = 'law') {
+        return apiClient.get('/knowledge/template', { params: { type }, responseType: 'blob' });
+    },
+
+    getReviewTemplates() {
+        return apiClient.get('/templates');
     }
-}; 
+};

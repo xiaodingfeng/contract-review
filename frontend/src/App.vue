@@ -1,25 +1,18 @@
 <template>
-  <div id="app" class="h-screen flex flex-col bg-bg-main font-sans">
-    <!-- Header -->
-    <header class="flex-shrink-0 bg-white border-b border-border-color shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-9">
-                <router-link to="/" class="flex items-center no-underline">
-                    <div class="flex-shrink-0 text-primary font-bold text-lg flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        合同审查
-                    </div>
-                </router-link>
-            </div>
-        </div>
+  <div id="app">
+    <header class="app-header">
+      <router-link to="/" class="brand" aria-label="合同审查首页">
+        <img src="/asserts/logo.png" alt="合同审查" />
+        <span>合同审查</span>
+      </router-link>
+      <nav class="app-nav">
+        <router-link to="/" class="nav-link" active-class="nav-link-active">工作台</router-link>
+        <router-link to="/review" class="nav-link" active-class="nav-link-active">合同审查</router-link>
+        <router-link to="/qna" class="nav-link" active-class="nav-link-active">智能问答</router-link>
+        <router-link to="/settings" class="nav-link" active-class="nav-link-active">知识库</router-link>
+      </nav>
     </header>
-
-    <!-- Main Content -->
-    <main class="flex-grow pl-4 pr-4">
-       <router-view></router-view>
-    </main>
+    <router-view />
   </div>
 </template>
 
@@ -30,30 +23,125 @@ export default {
 </script>
 
 <style>
-/* Remove all component-specific styles, handled by Tailwind now */
+:root {
+  color: #111111;
+  background: #ffffff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  letter-spacing: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
 #app {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #ffffff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-html {
-  overflow-y: scroll;
+a {
+  color: inherit;
 }
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+  box-shadow: inset 0 -1px 0 #e5e5e5;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #111111;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.brand img {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
 }
 
 .nav-link {
-    @apply text-text-light px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: #666666;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .nav-link:hover {
-    @apply text-text-dark bg-bg-subtle;
+  color: #111111;
+  background: #f5f5f5;
 }
 
 .nav-link-active {
-    @apply bg-primary-light text-primary-dark;
+  color: #ffffff;
+  background: #111111;
+}
+
+.el-button,
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: 8px !important;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: 34px !important;
+}
+
+.el-textarea__inner {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+@media (max-width: 680px) {
+  .app-header {
+    height: auto;
+    min-height: 56px;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 14px;
+  }
+
+  .app-nav {
+    width: 100%;
+  }
 }
 </style>
