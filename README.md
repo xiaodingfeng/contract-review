@@ -4,7 +4,7 @@ Contract General Expert - 一款合同审查AI应用 (Contract View)。
 
 V2版本正在开发
 
-> [Contract Review AI V2](https://github.com/xiaodingfeng/contract-review) 是一个面向中文合同审查场景的 Web 应用。系统支持合同上传、AI 预分析、审查点配置、OnlyOffice 在线预览编辑、知识库检索、裁判文书增强、智能问答和受控联网搜索。
+> [Contract Review AI V2](https://github.com/xiaodingfeng/contract-review-v2) 是一个面向中文合同审查场景的 Web 应用。系统支持合同上传、AI 预分析、审查点配置、OnlyOffice 在线预览编辑、知识库检索、裁判文书增强、智能问答和受控联网搜索。
 
 演示站 [ http://contract.fengzhengx.cn/ ]
 ## 预览
