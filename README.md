@@ -1,86 +1,256 @@
 # ContractGE
 
-Contract General Expert - 一款合同审查AI应用 (Contract View)。
+> 一款基于 AI 的中文合同审查系统，支持合同风险分析、OnlyOffice 在线预览编辑与智能问答。
 
-V2版本正在开发
+<p align="center">
+  <img src="img/home.png" width="100%" />
+</p>
 
-> [Contract Review AI V2](https://github.com/xiaodingfeng/contract-review-v2) 是一个面向中文合同审查场景的 Web 应用。系统支持合同上传、AI 预分析、审查点配置、OnlyOffice 在线预览编辑、知识库检索、裁判文书增强、智能问答和受控联网搜索。
+---
 
-演示站 [ http://contract.fengzhengx.cn/ ]
-## 预览
+## ✨ Features
+
+* 📄 合同上传与智能审查
+* ⚖️ AI 风险分析与修改建议
+* 📝 OnlyOffice 在线预览与编辑
+* 🤖 智能问答（Contract QA）
+* 🧠 本地大模型支持（DeepSeek）
+* 🌐 前后端分离架构
+* 🚀 快速部署与轻量化运行
+
+---
+
+## 🖼️ Preview
+
+### 首页
+
 ![](img/home.png)
+
+### 合同上传
+
 ![](img/step1.png)
+
+### AI 分析流程
+
 ![](img/step2.png)
+
+### 审查结果
+
 ![](img/step3-1.png)
+
 ![](img/step3-2.png)
+
 ![](img/step3-3.png)
+
 ![](img/step3-4.png)
+
 ![](img/step3-5.png)
-## 技术栈
 
-- **前端**: Vue 3 + Element UI + TailWind CSS
-- **后端**: Node.js + Express
-- **数据库**: SQLite
-- **office在线**: onlyoffice
-- **本地小模型**：deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+---
 
-## 项目启动
+## 🏗️ Tech Stack
 
-### 启动onlyoffice
-> docker run -i -t -d -p 8081:80 -e JWT_ENABLED=true -e JWT_SECRET=fsdftertrt34768586sfhjsdhfjhhjfsuhaiubue --restart=always onlyoffice/documentserver
+### Frontend
 
+* Vue 3
+* Element UI
+* Tailwind CSS
 
-### 1. 启动后端服务
+### Backend
 
-```bash
+* Node.js
+* Express
+
+### Database
+
+* SQLite
+
+### Office Integration
+
+* OnlyOffice Document Server
+
+### Local LLM
+
+* `deepseek-ai/DeepSeek-R1-0528-Qwen3-8B`
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone Repository
+
+```bash id="7c93j2"
+git clone https://github.com/xiaodingfeng/contract-review.git
+
+cd contract-review
+```
+
+---
+
+### 2. Start OnlyOffice
+
+```bash id="u0u4u8"
+docker run -i -t -d \
+-p 8081:80 \
+-e JWT_ENABLED=true \
+-e JWT_SECRET=your_jwt_secret \
+--restart=always \
+onlyoffice/documentserver
+```
+
+OnlyOffice 默认访问地址：
+
+```text id="7z2h9s"
+http://localhost:8081
+```
+
+---
+
+### 3. Start Backend
+
+```bash id="3xj9lr"
 cd backend
+
 npm install
+
 npm run dev
 ```
-后端服务将运行在 `http://localhost:3000`。
 
-### 2. 启动前端服务
+Backend 默认运行：
 
-```bash
+```text id="t6b5n1"
+http://localhost:3000
+```
+
+---
+
+### 4. Start Frontend
+
+```bash id="g3l2nk"
 cd frontend
+
 npm install
+
 npm run serve
 ```
-前端服务将运行在 `http://localhost:8080`。在浏览器中打开此地址即可访问应用。
 
-## 目录结构
+Frontend 默认运行：
 
+```text id="q6v6dq"
+http://localhost:8080
 ```
+
+浏览器访问：
+
+```text id="g9z1ul"
+http://localhost:8080
+```
+
+---
+
+## 📁 Project Structure
+
+```text id="f7x6tp"
 .
-├── backend/                # 后端代码
-│   ├── database.js         # 数据库初始化
-│   ├── index.js            # Express 服务入口
-│   ├── package.json        # 后端依赖
-│   └── routes/             # API 路由
+├── backend/
+│   ├── database.js         # SQLite 初始化
+│   ├── index.js            # Express 入口
+│   ├── package.json
+│   └── routes/
 │       ├── contracts.js
 │       └── qa.js
-├── frontend/               # 前端代码
+│
+├── frontend/
 │   ├── public/
-│   │   └── index.html
 │   ├── src/
-│   │   ├── api/            # API 请求封装
-│   │   │   └── index.js
+│   │   ├── api/
 │   │   ├── assets/
-│   │   ├── components/     # 公共组件
-│   │   │   └── Header.vue
-│   │   ├── router/         # 路由配置
-│   │   │   └── index.js
-│   │   ├── views/          # 页面视图
-│   │   │   ├── Home.vue
-│   │   │   ├── Review.vue
-│   │   │   ├── QnA.vue
-│   │   │   └── Settings.vue
-│   │   ├── App.vue         # 根组件
-│   │   └── main.js         # 入口文件
-│   └── package.json        # 前端依赖
-└── README.md               # 项目说明
-``` 
+│   │   ├── components/
+│   │   ├── router/
+│   │   ├── views/
+│   │   ├── App.vue
+│   │   └── main.js
+│   └── package.json
+│
+└── README.md
+```
 
-## Star History
+---
 
-[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review&Date)
+## ⚙️ Configuration
+
+### OnlyOffice JWT
+
+请确保前后端使用一致的 JWT Secret：
+
+```env id="j2k0vt"
+JWT_SECRET=your_jwt_secret
+```
+
+---
+
+## 🧠 AI Model
+
+当前默认本地模型：
+
+```text id="a4x6g2"
+deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+```
+
+你也可以替换为：
+
+* Qwen
+* DeepSeek
+* OpenAI Compatible API
+* Ollama 本地模型
+
+---
+
+## 📌 Roadmap
+
+* [ ] V2 重构版本
+* [ ] 多模型切换
+* [ ] 向量知识库
+* [ ] OCR 合同识别
+* [ ] 多租户支持
+* [ ] 审查规则配置
+* [ ] RAG 增强检索
+* [ ] Docker Compose 一键部署
+
+---
+
+## 🔥 Contract Review AI V2
+
+新版项目正在开发：
+
+# [Contract Review AI V2](https://github.com/xiaodingfeng/contract-review-v2)
+
+V2 特性：
+
+* PostgreSQL + Milvus
+* OnlyOffice 深度联动
+* 知识库增强
+* 裁判文书检索
+* 智能问答
+* 受控联网搜索
+* OpenAI Compatible API
+
+---
+
+## 🌐 Demo
+
+在线演示：
+
+# [ContractGE Demo](http://contract.fengzhengx.cn/)
+
+---
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review\&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review&Date)
+
+---
+
+## 📄 License
+
+MIT
