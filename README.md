@@ -7,7 +7,7 @@
 
 在线演示：
 
-# [ContractGE Demo(http://contract.fengzhengx.cn/)](http://contract.fengzhengx.cn/)
+# [ContractGE Demo(https://contract.fengzhengx.cn/)](https://contract.fengzhengx.cn/)
 
 <p align="center">
   <img src="img/home.png" width="100%" />
