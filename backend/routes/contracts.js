@@ -65,8 +65,8 @@ const callJsonLLM = async (prompt) => {
 
 const buildOnlyOfficeConfig = (contractRecord, ext = 'docx') => {
     const isPdf = ext === 'pdf';
-    const fileUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/uploads/${path.basename(contractRecord.storage_path)}`;
-    const callbackUrl = `http://${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
+    const fileUrl = `${BACKEND_URL_FOR_DOCKER}/api/uploads/${path.basename(contractRecord.storage_path)}`;
+    const callbackUrl = `${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
     const payload = {
         document: {
             fileType: ext,
