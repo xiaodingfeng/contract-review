@@ -1,6 +1,13 @@
 # ContractGE
 
 > 一款基于 AI 的中文合同审查系统，支持合同风险分析、OnlyOffice 在线预览编辑与智能问答。
+---
+
+## 🌐 Demo
+
+在线演示：
+
+# [ContractGE Demo(http://contract.fengzhengx.cn/)](http://contract.fengzhengx.cn/)
 
 <p align="center">
   <img src="img/home.png" width="100%" />
@@ -234,14 +241,6 @@ V2 特性：
 * 智能问答
 * 受控联网搜索
 * OpenAI Compatible API
-
----
-
-## 🌐 Demo
-
-在线演示：
-
-# [ContractGE Demo](http://contract.fengzhengx.cn/)
 
 ---
 
