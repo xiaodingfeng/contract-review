@@ -142,9 +142,9 @@
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-org/contract-review-ai.git
+git clone https://github.com/xiaodingfeng/contract-review-v2
 
-cd contract-review-ai
+cd contract-review-v2
 ```
 
 ---
