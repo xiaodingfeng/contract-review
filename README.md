@@ -54,11 +54,11 @@
 
 | 风险审查           | 修改建议           |
 | -------------- | -------------- |
-| ![](img/3.png) | ![](img/4.png) |
+| ![](img/3.png) | ![](img/5.png) |
 
 | 知识库            | 智能问答           |
 | -------------- | -------------- |
-| ![](img/5.png) | ![](img/6.png) |
+| ![](img/10.png) | ![](img/9.png) |
 
 更多演示图：
 
@@ -68,7 +68,7 @@
 
 ![](img/9.png)
 
-![](img/10.png)
+![](img/4.png)
 
 ![](img/11.png)
 
@@ -142,7 +142,7 @@
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/xiaodingfeng/contract-review-v2
+git clone https://github.com/xiaodingfeng/contract-review
 
 cd contract-review-v2
 ```
@@ -170,7 +170,7 @@ npm install
 copy .env.example .env
 
 # frontend
-copy .env.example .env.development
+copy .env.example .env
 ```
 
 ### Backend Required Variables
