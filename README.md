@@ -144,7 +144,7 @@
 ```bash
 git clone https://github.com/xiaodingfeng/contract-review
 
-cd contract-review-v2
+cd contract-review
 ```
 
 ---
