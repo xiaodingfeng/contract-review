@@ -371,3 +371,9 @@ MIT
 * Vue.js
 * PostgreSQL
 * Element Plus
+
+---
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review\&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review&Date)
