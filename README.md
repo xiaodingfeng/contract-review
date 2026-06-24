@@ -2,6 +2,10 @@
 
 > 基于 AI 的中文合同审查与知识库增强平台，支持合同风险分析、OnlyOffice 在线审阅、法律知识检索与智能问答。
 
+如需帮助，可微信联系
+
+<img width="200" height="200" alt="c72ca6981647870527ef8cd21ac141e8" src="https://github.com/user-attachments/assets/bd92b593-dfda-4f70-aa84-bed96b559567" />
+
 ## ✨ Features
 
 * 📄 合同上传与 AI 预分析
