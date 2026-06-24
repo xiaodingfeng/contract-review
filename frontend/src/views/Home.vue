@@ -58,14 +58,17 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in pagedHistory" :key="item.id">
-                <td class="file-cell" :title="item.original_filename">{{ item.original_filename }}</td>
+              <tr v-for="item in pagedHistory" :key="`${item.record_type}-${item.id}`">
+                <td class="file-cell" :title="item.original_filename">
+                  <span v-if="item.record_type === 'group'" class="record-type">多合同</span>
+                  {{ item.original_filename }}
+                </td>
                 <td>{{ formatDate(item.created_at) }}</td>
                 <td><span :class="['status-pill', item.status]">{{ statusText(item.status) }}</span></td>
                 <td>
                   <div class="row-actions">
-                    <button class="text-button" @click="viewReport(item.id)">查看</button>
-                    <el-popconfirm title="确认删除这份审查记录？" @confirm="deleteReport(item.id)">
+                    <button class="text-button" @click="viewReport(item)">查看</button>
+                    <el-popconfirm title="确认删除这份审查记录？" @confirm="deleteReport(item)">
                       <template #reference>
                         <button class="text-button danger">删除</button>
                       </template>
@@ -83,6 +86,46 @@
         </div>
       </div>
     </section>
+
+    <div v-if="groupReportVisible" class="report-modal">
+      <div class="report-modal__panel">
+        <header class="report-modal__header">
+          <div>
+            <p class="eyebrow">多合同关联分析</p>
+            <h2>{{ groupReport?.name || '关联合同分析报告' }}</h2>
+          </div>
+          <button class="text-button" @click="closeGroupReport">关闭</button>
+        </header>
+        <div v-if="groupReportLoading" class="empty-block">正在加载分析报告...</div>
+        <div v-else-if="groupReport" class="group-report">
+          <section>
+            <h3>关联文件</h3>
+            <div class="group-report__files">
+              <span v-for="contract in groupReport.contracts" :key="contract.id">{{ contract.original_filename }}</span>
+            </div>
+          </section>
+          <section v-if="groupReport.result?.summary">
+            <h3>整体结论</h3>
+            <p>{{ groupReport.result.summary }}</p>
+          </section>
+          <section v-if="groupReport.result?.conflicts?.length">
+            <h3>条款冲突与矛盾</h3>
+            <article v-for="(item, index) in groupReport.result.conflicts" :key="'modal-conflict-' + index" class="group-report__item">
+              <h4>{{ item.title || `冲突点 ${index + 1}` }}</h4>
+              <p>{{ item.description }}</p>
+              <p v-if="item.contract_refs?.length">涉及文件：{{ item.contract_refs.join('、') }}</p>
+              <p v-if="item.suggestion">处理建议：{{ item.suggestion }}</p>
+            </article>
+          </section>
+          <section v-if="groupReport.result?.shared_risks?.length">
+            <h3>跨合同共同风险</h3>
+            <ul>
+              <li v-for="(risk, index) in groupReport.result.shared_risks" :key="'modal-risk-' + index">{{ risk }}</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -102,6 +145,9 @@ export default {
     const error = ref(null);
     const historyPage = ref(1);
     const historyPageSize = 5;
+    const groupReportVisible = ref(false);
+    const groupReportLoading = ref(false);
+    const groupReport = ref(null);
     const router = useRouter();
 
     const workflow = [
@@ -152,13 +198,38 @@ export default {
       PreAnalyzed: '待确认',
     }[status] || status || '处理中');
 
-    const viewReport = (contractId) => {
-      router.push({ path: '/review', query: { contract_id: contractId } });
+    const viewReport = async (item) => {
+      if (item.record_type !== 'group') {
+        router.push({ path: '/review', query: { contract_id: item.id } });
+        return;
+      }
+
+      groupReportVisible.value = true;
+      groupReportLoading.value = true;
+      groupReport.value = null;
+      try {
+        const response = await api.getContractGroup(item.id);
+        groupReport.value = response.data;
+      } catch (err) {
+        ElMessage.error('加载关联合同分析报告失败。');
+        groupReportVisible.value = false;
+      } finally {
+        groupReportLoading.value = false;
+      }
     };
 
-    const deleteReport = async (contractId) => {
+    const closeGroupReport = () => {
+      groupReportVisible.value = false;
+      groupReport.value = null;
+    };
+
+    const deleteReport = async (item) => {
       try {
-        await api.deleteContract(contractId);
+        if (item.record_type === 'group') {
+          await api.deleteContractGroup(item.id);
+        } else {
+          await api.deleteContract(item.id);
+        }
         await fetchHistory();
       } catch {
         ElMessage.error('删除失败');
@@ -178,12 +249,16 @@ export default {
       loading,
       error,
       historyPage,
+      groupReportVisible,
+      groupReportLoading,
+      groupReport,
       totalHistoryPages,
       pagedHistory,
       fetchHistory,
       formatDate,
       statusText,
       viewReport,
+      closeGroupReport,
       deleteReport,
       startNewReview,
     };
@@ -438,6 +513,17 @@ button:disabled {
   font-weight: 700;
 }
 
+.record-type {
+  display: inline-flex;
+  margin-right: 6px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .status-pill {
   display: inline-flex;
   border-radius: 999px;
@@ -484,6 +570,89 @@ button:disabled {
   margin-top: 9px;
   color: #666666;
   font-size: 12px;
+}
+
+.report-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.38);
+  padding: 18px;
+}
+
+.report-modal__panel {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+}
+
+.report-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 12px;
+}
+
+.report-modal__header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.group-report {
+  display: grid;
+  gap: 16px;
+  padding-top: 14px;
+}
+
+.group-report h3 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 15px;
+}
+
+.group-report h4 {
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 13px;
+}
+
+.group-report p,
+.group-report li {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.group-report__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-report__files span {
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.group-report__item {
+  border-left: 3px solid #2563eb;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px 12px;
 }
 
 @media (max-width: 900px) {

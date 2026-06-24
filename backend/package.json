@@ -25,8 +25,10 @@
     "multer": "^1.4.5-lts.1",
     "openai": "^4.52.0",
     "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.18.0",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3",
+    "tesseract.js": "^7.0.0",
     "unidecode": "^0.1.8",
     "uuid": "^10.0.0"
   },

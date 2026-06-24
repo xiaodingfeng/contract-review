@@ -27,7 +27,7 @@
     </div>
 
     <!-- Step 0: Upload -->
-    <div v-if="activeStep === 0" class="flex-grow flex flex-col items-center justify-center py-8 px-4 text-center">
+    <div v-if="activeStep === 0" class="flex-grow overflow-y-auto flex flex-col items-center py-8 px-4 text-center">
       <h1 class="text-3xl font-bold tracking-tight text-text-dark sm:text-4xl">智能合同审查</h1>
       <p class="mt-3 text-base leading-7 text-text-light">上传您的合同文档，AI 将为您深度分析、识别风险、守护权益。</p>
 
@@ -51,6 +51,66 @@
             <p class="text-xs leading-5 text-gray-500">支持 .docx 格式</p>
           </div>
         </el-upload>
+      </div>
+
+      <div class="linked-analysis-panel mt-8 w-full max-w-2xl text-left">
+        <div>
+          <p class="text-sm font-semibold text-primary">多合同关联分析</p>
+          <h2 class="mt-1 text-xl font-semibold text-text-dark">同时审查主合同、附件和补充协议</h2>
+          <p class="mt-2 text-sm text-text-light">选择至少 2 份 DOCX 或 PDF 文件，系统会识别条款冲突、重复约定、遗漏和前后矛盾。</p>
+        </div>
+        <div class="linked-analysis-panel__picker">
+          <input
+            ref="linkedFileInput"
+            type="file"
+            multiple
+            accept=".docx,.pdf"
+            @change="handleLinkedFilesChange"
+            class="linked-analysis-panel__native-input"
+          />
+          <button type="button" class="linked-analysis-panel__file-button" @click="openLinkedFilePicker">
+            选择关联合同文件
+          </button>
+          <span class="linked-analysis-panel__count">已选择 {{ linkedGroupFiles.length }} 份</span>
+          <button
+            @click="startLinkedContractAnalysis"
+            :disabled="linkedAnalysisLoading || linkedGroupFiles.length < 2"
+            class="linked-analysis-panel__button"
+          >
+            {{ linkedAnalysisLoading ? '正在分析关联合同...' : '开始多合同关联分析' }}
+          </button>
+        </div>
+        <div v-if="linkedGroupFiles.length" class="linked-analysis-panel__files">
+          <span v-for="file in linkedGroupFiles" :key="file.name + file.size">{{ file.name }}</span>
+        </div>
+        <div v-if="linkedAnalysisProgress.length" class="linked-analysis-panel__progress">
+          <div v-for="item in linkedAnalysisProgress" :key="item.key" class="linked-analysis-panel__progress-row">
+            <span :class="['linked-analysis-panel__progress-dot', `linked-analysis-panel__progress-dot--${item.status}`]"></span>
+            <div>
+              <strong>{{ item.label }}</strong>
+              <p>{{ item.message }}</p>
+            </div>
+          </div>
+        </div>
+        <div v-if="linkedAnalysisResult" class="linked-analysis-result">
+          <h3>关联分析结果</h3>
+          <p v-if="linkedAnalysisResult.summary" class="linked-analysis-result__summary">{{ linkedAnalysisResult.summary }}</p>
+          <div v-if="linkedAnalysisResult.conflicts?.length" class="linked-analysis-result__section">
+            <h4>条款冲突与矛盾</h4>
+            <div v-for="(item, index) in linkedAnalysisResult.conflicts" :key="'conflict-' + index" class="linked-analysis-result__item">
+              <strong>{{ item.title || `冲突点 ${index + 1}` }}</strong>
+              <p>{{ item.description }}</p>
+              <p v-if="item.contract_refs?.length">涉及文件：{{ item.contract_refs.join('、') }}</p>
+              <p v-if="item.suggestion">处理建议：{{ item.suggestion }}</p>
+            </div>
+          </div>
+          <div v-if="linkedAnalysisResult.shared_risks?.length" class="linked-analysis-result__section">
+            <h4>跨合同共同风险</h4>
+            <ul>
+              <li v-for="(risk, index) in linkedAnalysisResult.shared_risks" :key="'shared-risk-' + index">{{ risk }}</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -197,6 +257,9 @@
                     </div>
                 </div>
                 <div>
+                    <button @click="exportReport('pdf')" class="mr-3 text-sm font-medium text-primary hover:text-primary-dark">导出PDF</button>
+                    <button @click="exportReport('word')" class="mr-3 text-sm font-medium text-primary hover:text-primary-dark">导出Word</button>
+                    <button @click="downloadPdfAnnotations" class="mr-3 text-sm font-medium text-primary hover:text-primary-dark">PDF批注</button>
                     <template v-if="cameFromHistory">
                         <button @click="goBackToUpload" class="text-sm font-medium text-primary hover:text-primary-dark">重新上传</button>
                         <button @click="goBackSmart" class="ml-4 text-sm font-medium text-primary hover:text-primary-dark">返回历史</button>
@@ -303,6 +366,19 @@
                 </div>
                 <!-- Modification Suggestions -->
                 <div v-if="activeAiTab === 'suggestions'">
+                    <div v-if="reviewData.modification_suggestions && reviewData.modification_suggestions.length > 0" class="mb-3 flex items-center justify-between gap-2">
+                        <el-checkbox-group v-model="selectedSuggestionIndexes" class="flex flex-wrap gap-2">
+                            <el-checkbox
+                                v-for="(item, index) in reviewData.modification_suggestions"
+                                :key="'select-ms-' + index"
+                                :label="index"
+                                border
+                            >{{ index + 1 }}</el-checkbox>
+                        </el-checkbox-group>
+                        <button @click="applySelectedSuggestions" :disabled="batchApplying || selectedSuggestionIndexes.length === 0" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark disabled:opacity-50">
+                            {{ batchApplying ? '批量采纳中...' : '一键采纳所选' }}
+                        </button>
+                    </div>
                     <div v-if="reviewData.modification_suggestions && reviewData.modification_suggestions.length > 0" class="space-y-4">
                         <div v-for="(item, index) in reviewData.modification_suggestions" :key="'ms-' + index" class="p-4 bg-bg-subtle rounded-md border border-border-color transition-all hover:shadow-md">
                             <div class="flex justify-between items-start">
@@ -393,6 +469,22 @@
                 <!-- Focused Review -->
                 <div v-if="activeAiTab === 'workspace'">
                     <div class="space-y-4">
+                        <div class="p-4 bg-white rounded-md border border-border-color">
+                            <div class="flex items-center justify-between">
+                                <h4 class="font-semibold text-text-dark">合同版本对比</h4>
+                                <button @click="loadLatestDiff" :disabled="diffLoading" class="px-3 py-1.5 text-xs font-medium text-primary bg-white border border-primary rounded hover:bg-primary-light">
+                                    {{ diffLoading ? '加载中...' : '查看最近变更' }}
+                                </button>
+                            </div>
+                            <div v-if="diffItems.length" class="mt-3 p-3 bg-bg-subtle rounded text-xs leading-6 max-h-56 overflow-y-auto whitespace-pre-wrap">
+                                <template v-for="(part, index) in diffItems" :key="'diff-' + index">
+                                    <span v-if="part.type === 'insert'" class="diff-insert">{{ part.text }}</span>
+                                    <span v-else-if="part.type === 'delete'" class="diff-delete">{{ part.text }}</span>
+                                    <span v-else>{{ part.text }}</span>
+                                </template>
+                            </div>
+                            <p v-else class="mt-2 text-xs text-text-light">采纳修改后会自动保存原始快照，可在这里查看新增和删除文本。</p>
+                        </div>
                         <div class="p-4 bg-bg-subtle rounded-md border border-border-color">
                             <div class="flex justify-between items-center">
                                 <h4 class="font-semibold text-text-dark">选中文本专项审查</h4>
@@ -497,15 +589,38 @@
 
     <!-- Loading Overlay - Moved inside the single root element -->
     <div v-if="loading && activeStep < 2" class="fixed inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-50">
-        <div class="flex flex-col items-center">
+        <div class="flex flex-col items-center max-w-md bg-white border border-border-color rounded-md p-4 shadow-sm">
             <p class="text-lg font-semibold text-text-dark">{{ loadingMessage }}</p>
+            <div v-if="analysisProgress.length" class="analysis-progress mt-4 w-full">
+                <div
+                    v-for="(item, index) in visibleAnalysisProgress"
+                    :key="'progress-' + index"
+                    class="analysis-progress__item"
+                    :class="[
+                        `analysis-progress__item--${progressStatusClass(item.status)}`,
+                        index === visibleAnalysisProgress.length - 1 ? 'analysis-progress__item--current' : ''
+                    ]"
+                >
+                    <div class="analysis-progress__marker">
+                        <span v-if="item.status === 'completed'">✓</span>
+                        <span v-else-if="item.status === 'failed'">!</span>
+                    </div>
+                    <div class="analysis-progress__content">
+                        <div class="analysis-progress__title">
+                            <span>{{ progressStepLabel(item.step) }}</span>
+                            <span class="analysis-progress__status">{{ progressStatusLabel(item.status) }}</span>
+                        </div>
+                        <p v-if="item.message" class="analysis-progress__message">{{ item.message }}</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, reactive, watch, toRaw, onMounted, nextTick, onUnmounted } from 'vue';
+import { ref, reactive, watch, toRaw, onMounted, nextTick, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
 import { ElMessage, ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete, ElSwitch, ElTooltip } from 'element-plus';
 import api from '../api';
@@ -540,6 +655,41 @@ export default {
     const hasPendingEditorChanges = ref(false);
     const selectedSuggestionPreview = ref(null);
     const adoptedHighlights = ref({});
+    const analysisProgress = ref([]);
+    const selectedSuggestionIndexes = ref([]);
+    const batchApplying = ref(false);
+    const diffItems = ref([]);
+    const diffLoading = ref(false);
+    const linkedGroupFiles = ref([]);
+    const linkedAnalysisLoading = ref(false);
+    const linkedAnalysisResult = ref(null);
+    const linkedAnalysisProgress = ref([]);
+    const linkedFileInput = ref(null);
+    const visibleAnalysisProgress = computed(() => analysisProgress.value.slice(-6));
+    const progressStepLabels = {
+      pre_analysis: '合同预分析',
+      extract_text: '提取合同正文',
+      knowledge_search: '检索法条与案例',
+      company_search: '核验合同主体',
+      llm_review: '生成审查结论',
+      finalize: '保存审查结果',
+      failed: '分析失败',
+    };
+    const progressStatusLabels = {
+      running: '进行中',
+      completed: '已完成',
+      failed: '失败',
+      reviewed: '已审查',
+      pre_analyzed: '已预分析',
+      processing: '处理中',
+    };
+    const progressStepLabel = (step) => progressStepLabels[step] || step || '处理中';
+    const progressStatusLabel = (status) => progressStatusLabels[status] || status || '处理中';
+    const progressStatusClass = (status) => {
+      if (status === 'completed' || status === 'reviewed' || status === 'pre_analyzed') return 'completed';
+      if (status === 'failed') return 'failed';
+      return 'running';
+    };
     const focusedReviewText = ref('');
     const focusedReviewQuestion = ref('');
     const focusedReviewResult = ref(null);
@@ -581,6 +731,14 @@ export default {
             });
             Object.assign(reviewData, data.results || data);
             if (data.perspective) perspective.value = data.perspective;
+        });
+
+        socket.value.on('analysis-progress', (data) => {
+            analysisProgress.value.push(data);
+            if (data.partialResult) {
+                Object.assign(reviewData, data.partialResult);
+            }
+            loadingMessage.value = data.message || loadingMessage.value;
         });
     };
 
@@ -712,6 +870,90 @@ export default {
     const handleUploadError = () => {
         loading.value = false;
         ElMessage.error('上传失败，请检查后端服务是否正常。');
+    };
+
+    const validateContractFile = (file) => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        return ['docx', 'pdf'].includes(ext);
+    };
+
+    const openLinkedFilePicker = () => {
+        linkedFileInput.value?.click();
+    };
+
+    const setLinkedProgress = (key, status, message) => {
+        const labels = {
+            select: '选择文件',
+            group: '创建分析记录',
+            upload: '上传关联合同',
+            analyze: 'AI 关联分析',
+            save: '保存分析结果',
+        };
+        const existing = linkedAnalysisProgress.value.find(item => item.key === key);
+        const payload = { key, label: labels[key] || key, status, message };
+        if (existing) {
+            Object.assign(existing, payload);
+        } else {
+            linkedAnalysisProgress.value.push(payload);
+        }
+    };
+
+    const handleLinkedFilesChange = (event) => {
+        const files = Array.from(event.target.files || []);
+        const validFiles = files.filter(validateContractFile);
+        if (validFiles.length !== files.length) {
+            ElMessage.warning('已忽略非 DOCX / PDF 格式文件。');
+        }
+        linkedGroupFiles.value = validFiles;
+        linkedAnalysisResult.value = null;
+        linkedAnalysisProgress.value = [];
+        if (validFiles.length) {
+            setLinkedProgress('select', validFiles.length >= 2 ? 'done' : 'running', `已选择 ${validFiles.length} 份合同。`);
+        }
+    };
+
+    const uploadContractToGroup = async (file, groupId, userId) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('userId', userId);
+        formData.append('groupId', groupId);
+        return api.uploadContract(formData);
+    };
+
+    const startLinkedContractAnalysis = async () => {
+        const userId = getUserId();
+        if (!userId) {
+            ElMessage.error('无法获取用户身份，请刷新页面重试。');
+            return;
+        }
+        if (linkedGroupFiles.value.length < 2) {
+            ElMessage.warning('请至少选择 2 份合同文件。');
+            return;
+        }
+
+        linkedAnalysisLoading.value = true;
+        linkedAnalysisResult.value = null;
+        try {
+            setLinkedProgress('group', 'running', '正在创建关联合同分析记录。');
+            const groupName = `关联合同组 ${new Date().toLocaleString('zh-CN')}`;
+            const groupRes = await api.createContractGroup({ name: groupName });
+            const groupId = groupRes.data.id;
+            setLinkedProgress('group', 'done', '分析记录已创建。');
+            setLinkedProgress('upload', 'running', '正在上传所选合同。');
+            await Promise.all(linkedGroupFiles.value.map((file) => uploadContractToGroup(file, groupId, userId)));
+            setLinkedProgress('upload', 'done', '合同上传完成。');
+            setLinkedProgress('analyze', 'running', 'AI 正在识别条款冲突与共同风险。');
+            const analysisRes = await api.analyzeContractGroup(groupId);
+            linkedAnalysisResult.value = analysisRes.data.result || {};
+            setLinkedProgress('analyze', 'done', '关联分析完成。');
+            setLinkedProgress('save', 'done', '分析结果已保存，可在历史记录中查看。');
+            ElMessage.success('多合同关联分析已完成。');
+        } catch (error) {
+            setLinkedProgress('analyze', 'failed', error.response?.data?.error || '多合同关联分析失败。');
+            ElMessage.error(error.response?.data?.error || '多合同关联分析失败，请稍后重试。');
+        } finally {
+            linkedAnalysisLoading.value = false;
+        }
     };
 
     const uploadAndGo = async (file) => {
@@ -1549,6 +1791,79 @@ export default {
         }, item);
     };
 
+    const downloadBlob = (blob, filename) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const applySelectedSuggestions = async () => {
+        const indexes = selectedSuggestionIndexes.value;
+        if (!indexes.length) {
+            ElMessage.warning('请选择要批量采纳的修改建议。');
+            return;
+        }
+        batchApplying.value = true;
+        try {
+            const suggestions = indexes.map((index) => {
+                const item = reviewData.modification_suggestions[index];
+                return {
+                    originalText: suggestionOriginal(item),
+                    suggestedText: suggestionText(item),
+                    originalCandidates: buildSuggestionCandidates(suggestionOriginal(item), item),
+                };
+            });
+            const response = await api.batchReplaceContractText(contract.id, { suggestions });
+            if (response.data.editorConfig) contract.editorConfig = response.data.editorConfig;
+            indexes.forEach((index) => {
+                if (reviewData.modification_suggestions[index]) reviewData.modification_suggestions[index].adopted = true;
+            });
+            ElMessage.success(`批量采纳完成，成功替换 ${response.data.totalReplacements || 0} 处。`);
+            await loadLatestDiff();
+        } catch (error) {
+            ElMessage.error(error.response?.data?.error || '批量采纳失败。');
+        } finally {
+            batchApplying.value = false;
+        }
+    };
+
+    const loadLatestDiff = async () => {
+        if (!contract.id) return;
+        diffLoading.value = true;
+        try {
+            const response = await api.getContractDiff(contract.id);
+            diffItems.value = response.data.diff || [];
+            activeAiTab.value = 'workspace';
+        } catch (error) {
+            ElMessage.info(error.response?.data?.error || '暂无可对比的合同版本。');
+        } finally {
+            diffLoading.value = false;
+        }
+    };
+
+    const exportReport = async (format = 'html') => {
+        try {
+            const response = await api.exportReviewReport(contract.id, format);
+            downloadBlob(response.data, `合同审查报告.${format === 'word' ? 'doc' : format}`);
+        } catch (error) {
+            ElMessage.error(error.response?.data?.error || '导出审查报告失败。');
+        }
+    };
+
+    const downloadPdfAnnotations = async () => {
+        try {
+            const response = await api.downloadPdfAnnotations(contract.id);
+            downloadBlob(response.data, 'PDF批注意见.txt');
+        } catch (error) {
+            ElMessage.error(error.response?.data?.error || '导出 PDF 批注意见失败。');
+        }
+    };
+
     return {
       activeStep,
       loading,
@@ -1560,6 +1875,14 @@ export default {
       handleBeforeUpload,
       handleUploadSuccess,
       handleUploadError,
+      handleLinkedFilesChange,
+      openLinkedFilePicker,
+      startLinkedContractAnalysis,
+      linkedGroupFiles,
+      linkedAnalysisLoading,
+      linkedAnalysisResult,
+      linkedAnalysisProgress,
+      linkedFileInput,
       goBackToUpload,
       goBackToConfirm,
       startAnalysis,
@@ -1604,7 +1927,20 @@ export default {
       applyFocusedSuggestion,
       locateText,
       addDocComment,
-      adoptSuggestion
+      adoptSuggestion,
+      analysisProgress,
+      visibleAnalysisProgress,
+      progressStepLabel,
+      progressStatusLabel,
+      progressStatusClass,
+      selectedSuggestionIndexes,
+      batchApplying,
+      applySelectedSuggestions,
+      diffItems,
+      diffLoading,
+      loadLatestDiff,
+      exportReport,
+      downloadPdfAnnotations
     };
   }
 };
@@ -1649,6 +1985,312 @@ export default {
 /* Input */
 .el-input__wrapper {
   @apply rounded-md border border-border-color shadow-sm transition-colors duration-200 ease-in-out focus-within:border-primary focus-within:ring-1 focus-within:ring-primary;
+}
+
+.diff-insert {
+  background: #dcfce7;
+  color: #166534;
+  text-decoration: none;
+}
+
+.diff-delete {
+  background: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+}
+
+.analysis-progress {
+  position: relative;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.analysis-progress__item {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.analysis-progress__item:last-child {
+  padding-bottom: 0;
+}
+
+.analysis-progress__item::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 22px;
+  bottom: 0;
+  width: 2px;
+  background: #d1d5db;
+}
+
+.analysis-progress__item:last-child::after {
+  display: none;
+}
+
+.analysis-progress__marker {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border-radius: 999px;
+  border: 2px solid #94a3b8;
+  background: #fff;
+  color: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.analysis-progress__item--running .analysis-progress__marker {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.analysis-progress__item--completed .analysis-progress__marker {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+.analysis-progress__item--failed .analysis-progress__marker {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.analysis-progress__content {
+  min-width: 0;
+  flex: 1;
+}
+
+.analysis-progress__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.analysis-progress__status {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.analysis-progress__item--completed .analysis-progress__status {
+  color: #16a34a;
+}
+
+.analysis-progress__item--failed .analysis-progress__status {
+  color: #dc2626;
+}
+
+.analysis-progress__message {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.linked-analysis-panel {
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 20px;
+  margin-bottom: 32px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.linked-analysis-panel__picker {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.linked-analysis-panel__native-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.linked-analysis-panel__file-button {
+  flex: 0 0 auto;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.linked-analysis-panel__file-button:hover {
+  background: #dbeafe;
+  border-color: #1d4ed8;
+}
+
+.linked-analysis-panel__count {
+  flex: 1;
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.linked-analysis-panel__button {
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.linked-analysis-panel__button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.linked-analysis-panel__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.linked-analysis-panel__files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.linked-analysis-panel__files span {
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.linked-analysis-panel__progress {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.linked-analysis-panel__progress-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.linked-analysis-panel__progress-row strong {
+  display: block;
+  color: #111827;
+  font-size: 12px;
+}
+
+.linked-analysis-panel__progress-row p {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.linked-analysis-panel__progress-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.linked-analysis-panel__progress-dot--running {
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.linked-analysis-panel__progress-dot--done {
+  background: #16a34a;
+}
+
+.linked-analysis-panel__progress-dot--failed {
+  background: #dc2626;
+}
+
+.linked-analysis-result {
+  margin-top: 16px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 14px;
+}
+
+.linked-analysis-result h3,
+.linked-analysis-result h4 {
+  color: #111827;
+  font-weight: 700;
+}
+
+.linked-analysis-result h3 {
+  font-size: 15px;
+}
+
+.linked-analysis-result h4 {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.linked-analysis-result__summary {
+  margin-top: 8px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.linked-analysis-result__item {
+  margin-top: 8px;
+  border-left: 3px solid #2563eb;
+  background: #fff;
+  padding: 10px 12px;
+  border-radius: 6px;
+}
+
+.linked-analysis-result__item p,
+.linked-analysis-result li {
+  margin-top: 4px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.linked-analysis-result ul {
+  margin-top: 6px;
+  padding-left: 18px;
+}
+
+@media (max-width: 640px) {
+  .linked-analysis-panel__picker {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .linked-analysis-panel__button {
+    width: 100%;
+  }
 }
 </style>
 

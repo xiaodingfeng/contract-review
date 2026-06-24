@@ -1,0 +1,38 @@
+[
+  {
+    "id": "labor",
+    "name": "劳动合同审查模板",
+    "contract_type_keywords": ["劳动", "雇佣", "offer", "录用", "员工"],
+    "review_points": ["主体信息与岗位约定", "试用期与录用条件", "薪酬福利与发放时间", "工作地点和工作时间", "竞业限制与保密义务", "解除条件和经济补偿", "违约责任合法性"],
+    "core_purposes": ["确认试用期、薪酬、解除条款符合法律强制规定", "识别用人单位或劳动者的单方不利条款", "形成可直接替换的合规文本"],
+    "report_sections": ["risk_summary", "modification_suggestions", "labor_compliance", "citations"],
+    "prompt_rules": ["重点核查劳动合同法强制性规定", "不得建议设置违法违约金", "试用期、解除、竞业限制必须给出明确依据"]
+  },
+  {
+    "id": "lease",
+    "name": "房屋租赁合同审查模板",
+    "contract_type_keywords": ["租赁", "出租", "承租", "房屋"],
+    "review_points": ["房屋权属和交付状态", "租金押金与支付周期", "维修义务和费用承担", "转租限制", "提前解除和违约责任", "保证金返还", "争议解决"],
+    "core_purposes": ["降低押金和违约金争议", "明确维修交付责任", "保障提前解除和续租安排可执行"],
+    "report_sections": ["risk_summary", "modification_suggestions", "performance_risk", "citations"],
+    "prompt_rules": ["重点核查押金、维修和提前解除条款", "区分出租方和承租方审查立场", "建议必须可直接落入合同文本"]
+  },
+  {
+    "id": "service",
+    "name": "服务/采购合同审查模板",
+    "contract_type_keywords": ["服务", "采购", "交付", "项目", "开发", "技术"],
+    "review_points": ["服务范围和验收标准", "交付里程碑", "付款条件", "知识产权归属", "保密和数据安全", "违约责任和责任上限", "变更与终止"],
+    "core_purposes": ["明确验收和付款闭环", "控制违约赔偿和责任上限", "补足知识产权、保密和交付风险"],
+    "report_sections": ["risk_summary", "modification_suggestions", "breach_cost_analysis", "citations"],
+    "prompt_rules": ["重点核查交付验收、付款触发条件和知识产权", "违约责任需要结合合同金额给出成本估计", "缺少关键条款时给出补充条款文本"]
+  },
+  {
+    "id": "general",
+    "name": "通用合同审查模板",
+    "contract_type_keywords": [],
+    "review_points": ["主体资格", "权利义务", "付款与交付", "违约责任", "解除终止", "保密与知识产权", "争议解决", "法律依据"],
+    "core_purposes": ["识别重大法律和履约风险", "输出可直接替换的修改建议", "补足缺失条款"],
+    "report_sections": ["risk_summary", "modification_suggestions", "missing_clauses", "citations"],
+    "prompt_rules": ["优先输出对用户立场有实质影响的风险", "所有法条和裁判观点必须来自 RAG 检索结果", "修改建议必须包含 original_text 和 suggested_text"]
+  }
+]
