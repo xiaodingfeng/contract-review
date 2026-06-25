@@ -78,9 +78,9 @@
 
 ![](img/7.png)
 
-![](img/8.png)
+![](img/12.png)
 
-![](img/9.png)
+![](img/6.png)
 
 ![](img/4.png)
 
