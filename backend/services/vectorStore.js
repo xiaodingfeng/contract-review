@@ -450,7 +450,7 @@ const importKnowledgeEntries = async (entries) => {
     return { imported, chunks, deduped, vectorStore: milvusReady ? 'milvus' : 'relational-fallback' };
 };
 
-const seedLawsFromMarkdown = async () => {
+const seedLawsFromMarkdown = async (onProgress) => {
     if (!KNOWLEDGE_SEED_TYPES.includes('law')) {
         console.log('[DB Init] Law seeding disabled by KNOWLEDGE_SEED_TYPES.');
         return { skipped: true, disabled: true };
@@ -485,11 +485,13 @@ const seedLawsFromMarkdown = async () => {
     }
 
     const totals = { imported: 0, chunks: 0, deduped: 0, files: 0, failed: 0, vectorStore: milvusReady ? 'milvus' : 'relational-fallback' };
+    let fileCounter = 0;
     for (let i = 0; i < files.length; i += LAW_SEED_FILE_BATCH_SIZE) {
         const batch = files.slice(i, i + LAW_SEED_FILE_BATCH_SIZE);
         const entries = [];
         for (const filePath of batch) {
             const sourceFile = path.relative(path.join(__dirname, '..'), filePath);
+            const fileName = path.basename(filePath);
             try {
                 const parsed = parseLegalMarkdownFile(filePath, { sourceFile });
                 if (parsed.length > 0) {
@@ -502,6 +504,17 @@ const seedLawsFromMarkdown = async () => {
             } catch (error) {
                 totals.failed += 1;
                 console.warn(`[DB Init] Failed to parse law markdown ${sourceFile}: ${error.message}`);
+            }
+            // 上报单文件进度
+            fileCounter += 1;
+            if (onProgress) {
+                await onProgress({
+                    phase: 'law',
+                    current: fileCounter,
+                    total: files.length,
+                    fileName,
+                    chunks: totals.chunks,
+                });
             }
         }
         if (entries.length > 0) {
@@ -517,7 +530,7 @@ const seedLawsFromMarkdown = async () => {
     return totals;
 };
 
-const seedCasesFromJson = async () => {
+const seedCasesFromJson = async (onProgress) => {
     if (!KNOWLEDGE_SEED_TYPES.includes('case')) {
         console.log('[DB Init] Case seeding disabled by KNOWLEDGE_SEED_TYPES.');
         return { skipped: true, disabled: true };
@@ -552,8 +565,10 @@ const seedCasesFromJson = async () => {
 
     const entries = [];
     const totals = { imported: 0, chunks: 0, deduped: 0, files: 0, failed: 0, vectorStore: milvusReady ? 'milvus' : 'relational-fallback' };
-    for (const filePath of files) {
+    for (let idx = 0; idx < files.length; idx += 1) {
+        const filePath = files[idx];
         const sourceFile = path.relative(path.join(__dirname, '..'), filePath);
+        const fileName = path.basename(filePath);
         try {
             const parsed = parseCaseJsonDocument(JSON.parse(fs.readFileSync(filePath, 'utf8')), { sourceFile });
             if (parsed) entries.push(parsed);
@@ -561,6 +576,15 @@ const seedCasesFromJson = async () => {
         } catch (error) {
             totals.failed += 1;
             console.warn(`[DB Init] Failed to parse case JSON ${sourceFile}: ${error.message}`);
+        }
+        if (onProgress) {
+            await onProgress({
+                phase: 'case',
+                current: idx + 1,
+                total: files.length,
+                fileName,
+                chunks: totals.chunks,
+            });
         }
     }
 
@@ -633,6 +657,18 @@ const deleteKnowledgeDocuments = async ({ ids = [], sourceIds = [], sourceType =
     await deleteMilvusRows(rows);
     await db('vector_documents').whereIn('id', rows.map((row) => row.id)).del();
     return { deleted: rows.length, vectorStore: milvusReady ? 'milvus' : 'relational-fallback' };
+};
+
+// 清空所有向量数据（用于重建），同时清空 SQLite 和 Milvus
+const clearAllVectorDocuments = async () => {
+    await ensureVectorStore();
+    const rows = await db('vector_documents').select('id', 'source_id', 'content_hash');
+    const deleted = rows.length;
+    if (deleted > 0) {
+        await deleteMilvusRows(rows);
+        await db('vector_documents').del();
+    }
+    return { deleted, vectorStore: milvusReady ? 'milvus' : 'relational-fallback' };
 };
 
 const listKnowledgeDocuments = async ({
@@ -849,7 +885,11 @@ const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], reran
     const queryVector = await embedText(cleanQuery);
     const candidateLimit = Math.max(limit * 8, limit);
     let results = await milvusVectorSearch(queryVector, { limit: candidateLimit, sourceTypes });
-    if (!results) {
+    // Milvus 返回空数组时也回退到关系库（避免 Milvus 无数据但 SQLite 有数据时搜不到）
+    if (!results || results.length === 0) {
+        if (results && results.length === 0 && milvusReady) {
+            console.log('[Vector Search] Milvus returned 0 results, falling back to relational vectors.');
+        }
         results = await sqliteVectorSearch(cleanQuery, queryVector, { limit: candidateLimit, sourceTypes });
     }
     const keywordResults = await keywordSearch(cleanQuery, { limit: candidateLimit, sourceTypes });
@@ -866,5 +906,6 @@ module.exports = {
     listKnowledgeDocuments,
     importKnowledgeEntries,
     deleteKnowledgeDocuments,
+    clearAllVectorDocuments,
     splitTextIntoChunks,
 };

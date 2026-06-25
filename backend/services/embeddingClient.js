@@ -53,7 +53,12 @@ const embedTexts = async (texts) => {
         const data = response.data?.data || [];
         return data.map((item) => item.embedding);
     } catch (error) {
-        console.warn(`[Embedding] Online embedding failed: ${error.message}. Falling back to local hash vectors.`);
+        const status = error.response?.status;
+        const respData = error.response?.data;
+        const detail = respData
+            ? (typeof respData === 'string' ? respData.substring(0, 200) : JSON.stringify(respData).substring(0, 200))
+            : '';
+        console.warn(`[Embedding] Online embedding failed: ${error.message}${status ? ` (HTTP ${status})` : ''}${detail ? ` Response: ${detail}` : ''}. Falling back to local hash vectors.`);
         return input.map(hashFallbackEmbedding);
     }
 };

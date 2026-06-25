@@ -4,11 +4,15 @@ const path = require('path');
 const fs = require('fs');
 const mammoth = require('mammoth');
 const pdf = require('pdf-parse');
+const db = require('../database');
 const {
     importKnowledgeEntries,
     searchVectorDocuments,
     deleteKnowledgeDocuments,
     listKnowledgeDocuments,
+    seedLawsFromMarkdown,
+    seedCasesFromJson,
+    clearAllVectorDocuments,
 } = require('../services/vectorStore');
 const { parseLegalMarkdown, parseLegalMarkdownFile } = require('../services/legalMarkdownParser');
 
@@ -245,6 +249,94 @@ router.delete('/:id', async (req, res) => {
     } catch (error) {
         console.error('[ERROR] Knowledge delete by id failed:', error);
         res.status(400).json({ error: error.message || 'Knowledge delete failed.' });
+    }
+});
+
+// 向量数据库状态查询
+router.get('/vector-status', async (req, res) => {
+    try {
+        const lawCount = await db('vector_documents').where({ source_type: 'law' }).count({ count: '*' }).first();
+        const caseCount = await db('vector_documents').where({ source_type: 'case' }).count({ count: '*' }).first();
+        const totalCount = await db('vector_documents').count({ count: '*' }).first();
+        const count = Number(totalCount?.count || 0);
+        res.json({
+            hasData: count > 0,
+            lawCount: Number(lawCount?.count || 0),
+            caseCount: Number(caseCount?.count || 0),
+            totalCount: count,
+        });
+    } catch (error) {
+        res.status(500).json({ error: `查询向量数据库状态失败: ${error.message}` });
+    }
+});
+
+// 重建向量数据库（SSE 流式返回进度）
+router.post('/rebuild', async (req, res) => {
+    // 设置 SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    // 异步发送 SSE 事件，yield 事件循环确保数据立即推送到客户端
+    const sendEvent = async (data) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        // 让出事件循环，允许 Node.js 将缓冲区的数据刷新到网络
+        await new Promise((resolve) => setImmediate(resolve));
+    };
+
+    try {
+        console.log('[Knowledge] Rebuild vector database started...');
+
+        // 1. 清空现有数据
+        await sendEvent({ phase: 'clearing', message: '正在清空现有向量数据...' });
+        const clearResult = await clearAllVectorDocuments();
+        console.log(`[Knowledge] Cleared ${clearResult.deleted} existing vector documents.`);
+        await sendEvent({ phase: 'clearing_done', cleared: clearResult.deleted });
+
+        // 2. Seed 法条
+        await sendEvent({ phase: 'law_start', message: '开始导入法条数据...' });
+        const lawResult = await seedLawsFromMarkdown(async (progress) => {
+            await sendEvent({
+                phase: 'law',
+                current: progress.current,
+                total: progress.total,
+                fileName: progress.fileName,
+                chunks: progress.chunks,
+            });
+        });
+        await sendEvent({ phase: 'law_done', result: lawResult });
+
+        // 3. Seed 案例
+        await sendEvent({ phase: 'case_start', message: '开始导入案例数据...' });
+        const caseResult = await seedCasesFromJson(async (progress) => {
+            await sendEvent({
+                phase: 'case',
+                current: progress.current,
+                total: progress.total,
+                fileName: progress.fileName,
+                chunks: progress.chunks,
+            });
+        });
+        await sendEvent({ phase: 'case_done', result: caseResult });
+
+        // 4. 完成
+        const summary = {
+            phase: 'complete',
+            message: '向量数据库重建完成',
+            cleared: clearResult.deleted,
+            law: lawResult,
+            case: caseResult,
+        };
+        console.log('[Knowledge] Rebuild vector database completed.');
+        await sendEvent(summary);
+        res.end();
+    } catch (error) {
+        console.error('[ERROR] Knowledge rebuild failed:', error);
+        await sendEvent({ phase: 'error', message: `向量数据库重建失败: ${error.message}` });
+        res.end();
     }
 });
 

@@ -7,12 +7,44 @@
     </section>
 
     <section class="panel list-panel">
+      <!-- 向量数据库为空时的提示 -->
+      <div v-if="vectorStatusChecked && !vectorStatus.hasData && !rebuilding" class="vector-empty-banner">
+        <div class="flex items-center gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+          <div>
+            <p class="font-semibold text-sm">向量数据库尚未构建</p>
+            <p class="text-xs text-gray-500">知识检索和合同审查需要向量数据库支持，请点击"重建向量数据库"进行初始化。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 重建进度面板 -->
+      <div v-if="rebuilding" class="rebuild-progress-panel">
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-semibold text-sm">{{ rebuildPhaseLabel }}</span>
+          <span class="text-xs text-gray-500">{{ rebuildPercent }}%</span>
+        </div>
+        <el-progress :percentage="rebuildPercent" :stroke-width="8" :status="rebuildError ? 'exception' : ''" />
+        <div v-if="rebuildFileName" class="mt-2 text-xs text-gray-600 truncate">
+          <span class="text-gray-400">正在处理：</span>{{ rebuildFileName }}
+        </div>
+        <div v-if="rebuildChunks > 0" class="text-xs text-gray-400 mt-1">
+          已生成 {{ rebuildChunks }} 个切片
+        </div>
+        <div v-if="rebuildError" class="mt-2 text-xs text-red-500">{{ rebuildError }}</div>
+      </div>
+
       <div class="panel-title">
         <div>
           <h2>知识列表</h2>
           <p>分页查看知识切片，用于定位和删除失效文档。</p>
         </div>
-        <button class="primary-button" @click="loadKnowledge">刷新</button>
+        <div class="flex gap-2">
+          <button class="primary-button" @click="loadKnowledge">刷新</button>
+          <button class="secondary-button" :disabled="rebuilding" @click="rebuildVectorDatabase">
+            {{ rebuilding ? '重建中...' : '重建向量数据库' }}
+          </button>
+        </div>
       </div>
 
       <div class="toolbar">
@@ -203,12 +235,12 @@
 
 <script>
 import { computed, onMounted, ref } from 'vue';
-import { ElDialog, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElUpload } from 'element-plus';
-import api from '../api';
+import { ElDialog, ElInput, ElMessage, ElMessageBox, ElOption, ElProgress, ElSelect, ElUpload } from 'element-plus';
+import api, { apiClient } from '../api';
 
 export default {
   name: 'SettingsView',
-  components: { ElDialog, ElInput, ElOption, ElSelect, ElUpload },
+  components: { ElDialog, ElInput, ElOption, ElProgress, ElSelect, ElUpload },
   setup() {
     const searchQuery = ref('');
     const sourceType = ref('');
@@ -232,6 +264,30 @@ export default {
     const retrievalLimit = ref(6);
     const retrievalResults = ref([]);
     const retrievalLoading = ref(false);
+    const rebuilding = ref(false);
+    const rebuildPhase = ref('');
+    const rebuildFileName = ref('');
+    const rebuildPercent = ref(0);
+    const rebuildChunks = ref(0);
+    const rebuildError = ref('');
+    const vectorStatus = ref({ hasData: true, lawCount: 0, caseCount: 0, totalCount: 0 });
+    const vectorStatusChecked = ref(false);
+
+    const rebuildPhaseLabel = computed(() => {
+      const labels = {
+        clearing: '正在清空现有数据...',
+        clearing_done: '清空完成',
+        law_start: '准备导入法条数据...',
+        law: '正在导入法条数据',
+        law_done: '法条导入完成',
+        case_start: '准备导入案例数据...',
+        case: '正在导入案例数据',
+        case_done: '案例导入完成',
+        complete: '重建完成',
+        error: '重建失败',
+      };
+      return labels[rebuildPhase.value] || rebuildPhase.value;
+    });
 
     const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
     const retrievalModeLabel = computed(() => ({
@@ -433,7 +489,128 @@ export default {
       }
     };
 
-    onMounted(loadKnowledge);
+    const rebuildVectorDatabase = async () => {
+      try {
+        await ElMessageBox.confirm(
+          '将清空所有现有向量数据并重新生成。此过程可能需要几分钟，确定继续？',
+          '重建向量数据库',
+          { confirmButtonText: '确认重建', cancelButtonText: '取消', type: 'warning' },
+        );
+      } catch {
+        return;
+      }
+
+      // 重置进度状态
+      rebuilding.value = true;
+      rebuildPhase.value = 'clearing';
+      rebuildFileName.value = '';
+      rebuildPercent.value = 0;
+      rebuildChunks.value = 0;
+      rebuildError.value = '';
+
+      try {
+        const baseURL = apiClient.defaults.baseURL || '';
+        const token = apiClient.defaults.headers?.Authorization || '';
+        const response = await fetch(`${baseURL}/knowledge/rebuild`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: token } : {}),
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              rebuildPhase.value = data.phase;
+
+              if (data.phase === 'law' || data.phase === 'case') {
+                rebuildFileName.value = data.fileName || '';
+                rebuildChunks.value = data.chunks || 0;
+                const total = data.total || 1;
+                const current = data.current || 0;
+
+                // 计算总进度：法条占 70%，案例占 25%，清空占 5%
+                if (data.phase === 'law') {
+                  rebuildPercent.value = Math.round(5 + (current / total) * 70);
+                } else {
+                  rebuildPercent.value = Math.round(75 + (current / total) * 25);
+                }
+              } else if (data.phase === 'clearing') {
+                rebuildPercent.value = 2;
+                rebuildFileName.value = '';
+              } else if (data.phase === 'clearing_done') {
+                rebuildPercent.value = 5;
+              } else if (data.phase === 'law_start') {
+                rebuildPercent.value = 5;
+              } else if (data.phase === 'law_done') {
+                rebuildPercent.value = 75;
+                rebuildFileName.value = '';
+              } else if (data.phase === 'case_start') {
+                rebuildPercent.value = 75;
+              } else if (data.phase === 'case_done') {
+                rebuildPercent.value = 100;
+                rebuildFileName.value = '';
+              } else if (data.phase === 'complete') {
+                rebuildPercent.value = 100;
+                rebuildPhase.value = 'complete';
+                const lawChunks = data.law?.chunks || 0;
+                const caseChunks = data.case?.chunks || 0;
+                ElMessage.success(
+                  `重建完成：清除 ${data.cleared || 0} 条，法条 ${lawChunks} 切片，案例 ${caseChunks} 切片。`,
+                );
+              } else if (data.phase === 'error') {
+                rebuildError.value = data.message || '重建失败';
+                ElMessage.error(data.message || '向量数据库重建失败。');
+              }
+            } catch {
+              // 忽略解析错误的行
+            }
+          }
+        }
+
+        await loadKnowledge();
+        await checkVectorStatus();
+      } catch (error) {
+        rebuildError.value = error.message || '向量数据库重建失败。';
+        ElMessage.error('向量数据库重建失败。');
+      } finally {
+        rebuilding.value = false;
+      }
+    };
+
+    const checkVectorStatus = async () => {
+      try {
+        const response = await api.getVectorStatus();
+        vectorStatus.value = response.data;
+        vectorStatusChecked.value = true;
+      } catch {
+        vectorStatusChecked.value = true;
+      }
+    };
+
+    onMounted(() => {
+      loadKnowledge();
+      checkVectorStatus();
+    });
 
     return {
       searchQuery,
@@ -473,6 +650,16 @@ export default {
       handleBatchFileChange,
       handleBatchFileRemove,
       batchImportKnowledge,
+      rebuilding,
+      rebuildVectorDatabase,
+      rebuildPhase,
+      rebuildPhaseLabel,
+      rebuildFileName,
+      rebuildPercent,
+      rebuildChunks,
+      rebuildError,
+      vectorStatus,
+      vectorStatusChecked,
     };
   },
 };
@@ -485,6 +672,22 @@ export default {
   padding: 12px 16px 24px;
   color: #111111;
   font-size: 13px;
+}
+
+.vector-empty-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.rebuild-progress-panel {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
 }
 
 .settings-head {

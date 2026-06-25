@@ -1,5 +1,5 @@
 const db = require('./database');
-const { ensureVectorStore, seedLawsFromMarkdown, seedCasesFromJson } = require('./services/vectorStore');
+const { ensureVectorStore } = require('./services/vectorStore');
 
 async function ensureColumn(tableName, columnName, addColumn) {
   const exists = await db.schema.hasColumn(tableName, columnName);
@@ -117,9 +117,7 @@ async function resetAndRebuildDatabase() {
     }
 
     await ensureVectorStore();
-    await seedLawsFromMarkdown();
-    await seedCasesFromJson();
-    console.log('[DB Init] Vector knowledge index is ready.');
+    console.log('[DB Init] Vector store tables created. Vector index will be built from the knowledge base page.');
 
   } catch (error) {
     console.error("[DB Init] FATAL: Failed to rebuild database schema:", error);
