@@ -2,6 +2,10 @@
 
 > 基于 AI 的中文合同审查与知识库增强平台，支持合同风险分析、OnlyOffice 在线审阅、法律知识检索与智能问答。
 
+如需帮助，可微信联系
+
+<img width="200" height="200" alt="c72ca6981647870527ef8cd21ac141e8" src="https://github.com/user-attachments/assets/bd92b593-dfda-4f70-aa84-bed96b559567" />
+
 ## ✨ Features
 
 * 📄 合同上传与 AI 预分析
@@ -54,11 +58,11 @@
 
 | 风险审查           | 修改建议           |
 | -------------- | -------------- |
-| ![](img/3.png) | ![](img/4.png) |
+| ![](img/3.png) | ![](img/5.png) |
 
 | 知识库            | 智能问答           |
 | -------------- | -------------- |
-| ![](img/5.png) | ![](img/6.png) |
+| ![](img/10.png) | ![](img/9.png) |
 
 更多演示图：
 
@@ -68,7 +72,7 @@
 
 ![](img/9.png)
 
-![](img/10.png)
+![](img/4.png)
 
 ![](img/11.png)
 
@@ -142,9 +146,9 @@
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/xiaodingfeng/contract-review-v2
+git clone https://github.com/xiaodingfeng/contract-review
 
-cd contract-review-v2
+cd contract-review
 ```
 
 ---
@@ -170,7 +174,7 @@ npm install
 copy .env.example .env
 
 # frontend
-copy .env.example .env.development
+copy .env.example .env
 ```
 
 ### Backend Required Variables
@@ -371,3 +375,9 @@ MIT
 * Vue.js
 * PostgreSQL
 * Element Plus
+
+---
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review\&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review&Date)
