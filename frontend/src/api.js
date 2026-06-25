@@ -37,8 +37,20 @@ export default {
         return apiClient.post('/contracts/analyze', payload);
     },
 
+    getAnalyzeStatus(contractId) {
+        return apiClient.get(`/contracts/analyze-status/${contractId}`);
+    },
+
     reviewSelectedText(payload) {
         return apiClient.post('/contracts/review-text', payload);
+    },
+
+    getFocusedReviews(contractId) {
+        return apiClient.get(`/contracts/${contractId}/focused-reviews`);
+    },
+
+    deleteFocusedReview(reviewId) {
+        return apiClient.delete(`/contracts/focused-reviews/${reviewId}`);
     },
 
     replaceContractText(contractId, payload) {
@@ -78,6 +90,13 @@ export default {
 
     getContractGroup(groupId) {
         return apiClient.get(`/contracts/groups/${groupId}`);
+    },
+
+    exportContractGroup(groupId, format = 'html') {
+        return apiClient.get(`/contracts/groups/${groupId}/export`, {
+            params: { format },
+            responseType: 'blob'
+        });
     },
 
     deleteContractGroup(groupId) {
@@ -121,8 +140,15 @@ export default {
         return apiClient.get('/contracts');
     },
 
-    getQAHistory(sessionId) {
-        return apiClient.get(`/qa/history/${sessionId}`);
+    getQAHistory(sessionId, contractId) {
+        const params = {};
+        if (contractId !== undefined && contractId !== null) {
+            params.contractId = contractId;
+        } else {
+            // 未选择合同时，只查询未关联合同的历史记录
+            params.contractId = 'none';
+        }
+        return apiClient.get(`/qa/history/${sessionId}`, { params });
     },
 
     askQA(data) {

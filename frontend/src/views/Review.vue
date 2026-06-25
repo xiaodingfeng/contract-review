@@ -48,7 +48,7 @@
               <span class="font-semibold text-primary">点击上传</span>
               <p class="pl-1">或将文件拖到此处</p>
             </div>
-            <p class="text-xs leading-5 text-gray-500">支持 .docx 格式</p>
+            <p class="text-xs leading-5 text-gray-500">支持 .docx 和 .pdf 格式（PDF 需为可复制的文字版，不支持扫描件）</p>
           </div>
         </el-upload>
       </div>
@@ -119,7 +119,25 @@
       <div v-if="preAnalysisData.contract_type">
         <div class="text-center mb-10">
             <p class="text-lg text-text-main">文件 <span class="font-semibold text-primary">{{ contract.original_filename }}</span> 已上传成功。</p>
-            <p class="mt-2 text-md text-text-light">AI初步识别该合同为：<span class="font-semibold text-text-dark">{{ preAnalysisData.contract_type }}</span></p>
+            <div class="mt-2 flex items-center justify-center gap-2">
+                <p class="text-md text-text-light">AI初步识别该合同为：</p>
+                <el-input
+                    v-model="preAnalysisData.contract_type"
+                    class="contract-type-edit"
+                    size="small"
+                    style="width: 240px;"
+                    placeholder="可修改合同类型"
+                />
+            </div>
+            <button @click="showContractPreview = !showContractPreview" class="mt-3 text-sm font-medium text-primary hover:text-primary-dark inline-flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform" :class="{ 'rotate-180': showContractPreview }" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                {{ showContractPreview ? '收起合同预览' : '查看合同预览' }}
+                <span v-if="preAnalysisData.text_stats" class="text-xs text-text-light font-normal">（{{ preAnalysisData.text_stats.charCount }} 字）</span>
+            </button>
+            <div v-if="showContractPreview" class="mt-3 mx-auto max-w-3xl text-left bg-white border border-border-color rounded-lg p-4 max-h-60 overflow-y-auto">
+                <p class="text-sm text-text-main leading-relaxed whitespace-pre-line">{{ contractPreviewText }}</p>
+                <p v-if="preAnalysisData.text_stats && preAnalysisData.text_stats.charCount > 200" class="mt-2 pt-2 border-t border-border-color text-xs text-text-light text-center">仅展示前 200 字，完整内容将在审查后显示</p>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -282,15 +300,74 @@
 
             <!-- Tab Content -->
             <div class="p-3 overflow-y-auto flex-grow">
+                <!-- 风险仪表盘 -->
+                <div v-if="activeAiTab === 'summary' && riskDashboard.total > 0" class="mb-4 p-4 bg-white rounded-md border border-border-color">
+                    <div class="flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-semibold text-text-dark">整体风险等级</span>
+                            <span :class="riskDashboard.overallClass" class="px-3 py-1 text-sm font-bold rounded-full border">{{ riskDashboard.overallLabel }}</span>
+                        </div>
+                        <div class="flex items-center gap-4 text-xs">
+                            <div class="flex items-center gap-1">
+                                <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                <span class="text-text-main">高危 {{ riskDashboard.stats.high }}</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                                <span class="text-text-main">中危 {{ riskDashboard.stats.medium }}</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                                <span class="text-text-main">低危 {{ riskDashboard.stats.low }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-center">
+                        <div class="p-2 bg-bg-subtle rounded">
+                            <p class="text-lg font-bold text-text-dark">{{ riskDashboard.moduleCounts.disputes }}</p>
+                            <p class="text-xs text-text-light">风险点</p>
+                        </div>
+                        <div class="p-2 bg-bg-subtle rounded">
+                            <p class="text-lg font-bold text-text-dark">{{ riskDashboard.moduleCounts.suggestions }}</p>
+                            <p class="text-xs text-text-light">修改建议</p>
+                        </div>
+                        <div class="p-2 bg-bg-subtle rounded">
+                            <p class="text-lg font-bold text-text-dark">{{ riskDashboard.moduleCounts.missing }}</p>
+                            <p class="text-xs text-text-light">缺失条款</p>
+                        </div>
+                        <div class="p-2 bg-bg-subtle rounded">
+                            <p class="text-lg font-bold text-text-dark">{{ riskDashboard.moduleCounts.breach }}</p>
+                            <p class="text-xs text-text-light">违约场景</p>
+                        </div>
+                        <div class="p-2 bg-bg-subtle rounded">
+                            <p class="text-lg font-bold text-text-dark">{{ riskDashboard.moduleCounts.party }}</p>
+                            <p class="text-xs text-text-light">主体审查</p>
+                        </div>
+                    </div>
+                </div>
                 <!-- Dispute Points -->
                 <div v-if="activeAiTab === 'summary'">
-                    <div v-if="reviewData.dispute_points && reviewData.dispute_points.length > 0" class="space-y-4">
-                        <div v-for="(item, index) in reviewData.dispute_points" :key="'dp-' + index" class="p-4 bg-bg-subtle rounded-md border border-border-color">
-                            <p class="font-semibold text-text-dark">{{ disputeTitle(item, index) }}</p>
-                            <p v-if="!showPlainLanguage" class="mt-2 text-sm text-text-main whitespace-pre-line">{{ disputeDescription(item) }}</p>
-                            <div v-else class="mt-2 p-3 bg-blue-50 text-blue-800 rounded-md border-l-4 border-blue-400">
-                                <p class="text-xs font-bold mb-1">📢 大白话解释：</p>
-                                <p class="text-sm">{{ item.plain_language || disputeDescription(item) }}</p>
+                    <div v-if="reviewData.dispute_points && reviewData.dispute_points.length > 0">
+                        <!-- 风险等级过滤 -->
+                        <div class="mb-3 flex items-center gap-2 flex-wrap">
+                            <span class="text-xs text-text-light">风险等级筛选：</span>
+                            <button @click="severityFilter = 'all'" :class="severityFilter === 'all' ? 'bg-primary text-white' : 'bg-white text-text-main border border-border-color'" class="px-2 py-0.5 text-xs rounded">全部 ({{ reviewData.dispute_points.length }})</button>
+                            <button v-if="disputeSeverityStats.high" @click="severityFilter = 'high'" :class="severityFilter === 'high' ? 'bg-red-500 text-white' : 'bg-red-50 text-red-700 border border-red-300'" class="px-2 py-0.5 text-xs rounded">高 ({{ disputeSeverityStats.high }})</button>
+                            <button v-if="disputeSeverityStats.medium" @click="severityFilter = 'medium'" :class="severityFilter === 'medium' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 border border-amber-300'" class="px-2 py-0.5 text-xs rounded">中 ({{ disputeSeverityStats.medium }})</button>
+                            <button v-if="disputeSeverityStats.low" @click="severityFilter = 'low'" :class="severityFilter === 'low' ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-700 border border-blue-300'" class="px-2 py-0.5 text-xs rounded">低 ({{ disputeSeverityStats.low }})</button>
+                            <span class="text-xs text-text-light ml-2">已按严重程度从高到低排序</span>
+                        </div>
+                        <div class="space-y-4">
+                            <div v-for="(item, index) in filteredAndSortedDisputePoints" :key="'dp-' + index" :class="['p-4 bg-bg-subtle rounded-md border border-border-color', normalizeSeverity(item.severity) === 'high' ? 'border-l-4 border-l-red-500' : normalizeSeverity(item.severity) === 'medium' ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-blue-500']">
+                                <div class="flex justify-between items-start gap-2">
+                                    <p class="font-semibold text-text-dark">{{ disputeTitle(item, index) }}</p>
+                                    <span v-if="item.severity" :class="severityClass(item.severity)" class="px-2 py-0.5 text-xs font-bold rounded border whitespace-nowrap">{{ severityLabel(item.severity) }}</span>
+                                </div>
+                                <p v-if="!showPlainLanguage" class="mt-2 text-sm text-text-main whitespace-pre-line">{{ disputeDescription(item) }}</p>
+                                <div v-else class="mt-2 p-3 bg-blue-50 text-blue-800 rounded-md border-l-4 border-blue-400">
+                                    <p class="text-xs font-bold mb-1">📢 大白话解释：</p>
+                                    <p class="text-sm">{{ item.plain_language || disputeDescription(item) }}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -299,6 +376,10 @@
                 <!-- Breach Cost Analysis -->
                 <div v-if="activeAiTab === 'summary'">
                     <div v-if="reviewData.breach_cost_analysis && reviewData.breach_cost_analysis.length > 0" class="space-y-4">
+                        <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-xs text-yellow-800 flex items-start gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            <span>以下违约成本由 AI 基于合同文本和法律依据估算，仅供参考，不构成法律意见或赔偿承诺。实际赔偿金额以法院判决或双方协商为准。</span>
+                        </div>
                         <div v-for="(item, index) in reviewData.breach_cost_analysis" :key="'bc-' + index" class="p-4 bg-orange-50 rounded-md border border-orange-200">
                             <p class="font-bold text-orange-900 flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -309,7 +390,7 @@
                                 <p class="text-orange-800">{{ item.legal_basis }}</p>
                             </div>
                             <div class="mt-3 p-2 bg-white rounded border border-orange-100">
-                                <p class="text-xs text-gray-500 font-medium">预计赔偿/成本：</p>
+                                <p class="text-xs text-gray-500 font-medium">预计赔偿/成本（仅供参考）：</p>
                                 <p class="text-md font-bold text-danger">{{ item.estimated_cost }}</p>
                             </div>
                         </div>
@@ -375,9 +456,12 @@
                                 border
                             >{{ index + 1 }}</el-checkbox>
                         </el-checkbox-group>
-                        <button @click="applySelectedSuggestions" :disabled="batchApplying || selectedSuggestionIndexes.length === 0" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark disabled:opacity-50">
-                            {{ batchApplying ? '批量采纳中...' : '一键采纳所选' }}
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <span v-if="isPdfContract" class="text-xs text-amber-600">PDF 不支持采纳</span>
+                            <button @click="applySelectedSuggestions" :disabled="batchApplying || isPdfContract || selectedSuggestionIndexes.length === 0" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed">
+                                {{ batchApplying ? '批量采纳中...' : '一键采纳所选' }}
+                            </button>
+                        </div>
                     </div>
                     <div v-if="reviewData.modification_suggestions && reviewData.modification_suggestions.length > 0" class="space-y-4">
                         <div v-for="(item, index) in reviewData.modification_suggestions" :key="'ms-' + index" class="p-4 bg-bg-subtle rounded-md border border-border-color transition-all hover:shadow-md">
@@ -425,13 +509,21 @@
                                     <p class="text-gray-500 font-medium">理由：</p>
                                     <p class="mt-1 text-text-main">{{ suggestionReason(item) }}</p>
                                 </div>
+                                <div v-if="item.citations && item.citations.length" class="text-xs">
+                                    <p class="text-gray-500 font-medium">法律依据：</p>
+                                    <div v-for="(cite, cIndex) in item.citations" :key="'cite-' + index + '-' + cIndex" class="mt-1 p-2 bg-blue-50 border-l-4 border-blue-300 rounded">
+                                        <p class="font-medium text-blue-800">【{{ cite.source_type || '依据' }}】{{ cite.title || '' }}{{ cite.clause ? ' ' + cite.clause : '' }}</p>
+                                        <p v-if="cite.content" class="mt-0.5 text-blue-700">{{ cite.content }}</p>
+                                    </div>
+                                </div>
                             </div>
                             
-                            <div class="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+                            <div class="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center">
+                                <span v-if="isPdfContract" class="mr-2 text-xs text-amber-600">PDF 文件不支持原文改写，请使用审查报告导出或 PDF 批注</span>
                                 <button @click="previewSuggestion(item)" class="mr-2 px-3 py-1.5 text-xs font-medium text-primary bg-white border border-primary rounded hover:bg-primary-light transition-colors">
                                     查看变更
                                 </button>
-                                <button @click="adoptSuggestion(item)" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark transition-colors flex items-center">
+                                <button @click="adoptSuggestion(item)" :disabled="isPdfContract || item.adopted" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                                     {{ item.adopted ? '已采纳' : '一键采纳建议' }}
                                 </button>
@@ -532,6 +624,29 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 专项审查历史 -->
+                        <div v-if="focusedReviewHistory.length" class="p-4 bg-white rounded-md border border-border-color">
+                            <div class="flex justify-between items-center">
+                                <p class="font-semibold text-text-dark text-sm">历史专项审查（已持久化，刷新不丢失）</p>
+                                <span class="text-xs text-text-light">{{ focusedReviewHistory.length }} 条</span>
+                            </div>
+                            <div class="mt-2 space-y-2 max-h-72 overflow-y-auto">
+                                <div v-for="item in focusedReviewHistory" :key="'fr-h-' + item.id" class="p-2 bg-bg-subtle rounded text-xs border border-transparent hover:border-primary transition-colors">
+                                    <div class="flex justify-between items-start gap-2">
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-text-main font-medium truncate">{{ item.question || '（无专项问题）' }}</p>
+                                            <p class="text-text-light mt-0.5 truncate">原文：{{ item.source_text }}</p>
+                                            <p class="text-text-light mt-0.5">{{ formatHistoryTime(item.created_at) }}</p>
+                                        </div>
+                                        <div class="flex gap-1 flex-shrink-0">
+                                            <button @click="loadFocusedReviewFromHistory(item)" class="px-2 py-1 text-xs text-primary border border-primary rounded hover:bg-primary hover:text-white">查看</button>
+                                            <button @click="deleteFocusedReviewFromHistory(item.id)" class="px-2 py-1 text-xs text-red-500 border border-red-300 rounded hover:bg-red-500 hover:text-white">删除</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <!-- Re-review Form -->
@@ -581,6 +696,42 @@
                                 {{ reAnalyzing ? '正在重审...' : '确认重审' }}
                             </button>
                         </div>
+                        <!-- 重审进度面板 -->
+                        <div v-if="reAnalyzing || analysisActive" class="reanalysis-progress p-4 bg-white rounded-md border border-border-color">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-semibold text-text-dark">{{ loadingMessage || '正在重新审查合同...' }}</span>
+                                <span v-if="analysisPercent > 0" class="text-lg font-bold text-primary">{{ analysisPercent }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-2">
+                                <div class="bg-primary h-2 rounded-full transition-all duration-500 ease-out" :style="{ width: analysisPercent + '%' }"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-text-light mb-3">
+                                <span>已用时：{{ formatDuration(analysisElapsed) }}</span>
+                                <span v-if="analysisEta > 0">预计剩余：{{ formatDuration(analysisEta) }}</span>
+                            </div>
+                            <div v-if="analysisSteps.length" class="analysis-progress mt-2 w-full">
+                                <div
+                                    v-for="(step, index) in analysisSteps"
+                                    :key="'re-step-' + index"
+                                    class="analysis-progress__item"
+                                    :class="[`analysis-progress__item--${progressStatusClass(step.status)}`]"
+                                >
+                                    <div class="analysis-progress__marker">
+                                        <span v-if="step.status === 'completed'">✓</span>
+                                        <span v-else-if="step.status === 'failed'">!</span>
+                                        <span v-else-if="step.status === 'running'" class="analysis-progress__spinner"></span>
+                                        <span v-else>{{ index + 1 }}</span>
+                                    </div>
+                                    <div class="analysis-progress__content">
+                                        <div class="analysis-progress__title">
+                                            <span>{{ step.label }}</span>
+                                            <span class="analysis-progress__status">{{ progressStatusLabel(step.status) }}</span>
+                                        </div>
+                                        <p v-if="step.message" class="analysis-progress__message">{{ step.message }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                    </div>
                 </div>
             </div>
@@ -589,9 +740,50 @@
 
     <!-- Loading Overlay - Moved inside the single root element -->
     <div v-if="loading && activeStep < 2" class="fixed inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-50">
-        <div class="flex flex-col items-center max-w-md bg-white border border-border-color rounded-md p-4 shadow-sm">
-            <p class="text-lg font-semibold text-text-dark">{{ loadingMessage }}</p>
-            <div v-if="analysisProgress.length" class="analysis-progress mt-4 w-full">
+        <div class="flex flex-col items-center max-w-lg bg-white border border-border-color rounded-md p-6 shadow-sm w-full mx-4">
+            <div class="flex items-center justify-between w-full mb-3">
+                <p class="text-lg font-semibold text-text-dark">{{ loadingMessage }}</p>
+                <span v-if="analysisPercent > 0" class="text-2xl font-bold text-primary">{{ analysisPercent }}%</span>
+            </div>
+
+            <!-- 进度条 -->
+            <div v-if="analysisActive" class="w-full mb-3">
+                <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                    <div class="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out" :style="{ width: analysisPercent + '%' }"></div>
+                </div>
+                <div class="flex justify-between text-xs text-text-light mt-1">
+                    <span>已用时：{{ formatDuration(analysisElapsed) }}</span>
+                    <span v-if="analysisEta > 0">预计剩余：{{ formatDuration(analysisEta) }}</span>
+                </div>
+            </div>
+
+            <!-- 步骤列表 -->
+            <div v-if="analysisSteps.length" class="analysis-progress mt-2 w-full">
+                <div
+                    v-for="(step, index) in analysisSteps"
+                    :key="'step-' + index"
+                    class="analysis-progress__item"
+                    :class="[
+                        `analysis-progress__item--${progressStatusClass(step.status)}`,
+                    ]"
+                >
+                    <div class="analysis-progress__marker">
+                        <span v-if="step.status === 'completed'">✓</span>
+                        <span v-else-if="step.status === 'failed'">!</span>
+                        <span v-else-if="step.status === 'running'" class="analysis-progress__spinner"></span>
+                        <span v-else>{{ index + 1 }}</span>
+                    </div>
+                    <div class="analysis-progress__content">
+                        <div class="analysis-progress__title">
+                            <span>{{ step.label }}</span>
+                            <span class="analysis-progress__status">{{ progressStatusLabel(step.status) }}</span>
+                        </div>
+                        <p v-if="step.message" class="analysis-progress__message">{{ step.message }}</p>
+                    </div>
+                </div>
+            </div>
+            <!-- 兼容旧版进度事件（无 steps 结构时） -->
+            <div v-else-if="analysisProgress.length" class="analysis-progress mt-4 w-full">
                 <div
                     v-for="(item, index) in visibleAnalysisProgress"
                     :key="'progress-' + index"
@@ -616,6 +808,74 @@
             </div>
         </div>
     </div>
+
+    <!-- 会话恢复失败重试遮罩 -->
+    <div v-if="sessionLoadFailed" class="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50">
+        <div class="flex flex-col items-center max-w-md bg-white border border-border-color rounded-md p-6 shadow-md w-full mx-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-amber-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <p class="text-lg font-semibold text-text-dark mb-1">恢复会话失败</p>
+            <p class="text-sm text-text-light text-center mb-4">可能是网络连接问题导致无法加载合同详情。您的审查进度已保留，可点击下方按钮重试，或返回首页。</p>
+            <div class="flex gap-3">
+                <button @click="retryLoadSession" class="px-4 py-2 text-sm font-medium text-white bg-primary rounded hover:bg-primary-dark">重试恢复</button>
+                <button @click="sessionLoadFailed = false; resetState();" class="px-4 py-2 text-sm font-medium text-text-main bg-white border border-border-color rounded hover:bg-bg-subtle">放弃并重置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inline Q&A Chat Widget -->
+    <div v-if="activeStep === 2" class="qa-chat-widget" :class="{ 'qa-chat-widget--open': qaPanelOpen }">
+        <div v-if="!qaPanelOpen" class="qa-chat-widget__fab" @click="toggleQaPanel">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+            <span class="qa-chat-widget__fab-badge" v-if="qaMessages.length">智能问答</span>
+            <span class="qa-chat-widget__fab-badge" v-else>智能问答</span>
+        </div>
+        <div v-else class="qa-chat-widget__panel">
+            <div class="qa-chat-widget__header">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                    <span class="font-semibold text-sm text-text-dark">智能问答</span>
+                    <span v-if="contract.id" class="text-xs text-text-light">已关联：{{ contract.original_filename }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button v-if="qaMessages.length" @click="clearQaChat" title="清空会话" class="text-gray-400 hover:text-red-500 p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                    <button @click="toggleQaPanel" title="关闭" class="text-gray-400 hover:text-text-dark p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+            </div>
+            <div ref="qaChatBody" class="qa-chat-widget__body">
+                <div v-if="qaMessages.length === 0" class="qa-chat-widget__empty">
+                    <p class="text-sm text-text-light">输入问题，AI 将基于当前合同为您解答。</p>
+                    <p class="text-xs text-text-light mt-1">例如：试用期超过法定期限怎么处理？</p>
+                </div>
+                <div v-for="(msg, index) in qaMessages" :key="'qa-' + index" class="qa-chat-widget__msg" :class="'qa-chat-widget__msg--' + msg.role">
+                    <div class="qa-chat-widget__bubble">
+                        <p class="qa-chat-widget__role">{{ msg.role === 'user' ? '你' : 'AI 助手' }}</p>
+                        <div class="qa-chat-widget__content" v-html="renderQaMarkdown(msg.content || '正在生成...')"></div>
+                    </div>
+                </div>
+                <div v-if="qaLoading" class="qa-chat-widget__typing">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            <div class="qa-chat-widget__footer">
+                <el-input
+                    v-model="qaInput"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="输入问题，Enter 发送，Shift+Enter 换行"
+                    resize="none"
+                    :disabled="qaLoading"
+                    @keydown.enter.prevent="handleQaEnter"
+                />
+                <button @click="sendQaMessage" :disabled="!qaInput.trim() || qaLoading" class="qa-chat-widget__send">
+                    发送
+                </button>
+            </div>
+        </div>
+    </div>
   </div>
 </template>
 
@@ -623,6 +883,8 @@
 import { ref, reactive, watch, toRaw, onMounted, nextTick, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
 import { ElMessage, ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete, ElSwitch, ElTooltip } from 'element-plus';
+import { marked } from 'marked';
+import { v4 as uuidv4 } from 'uuid';
 import api from '../api';
 import { getUserId } from '../user';
 import { DocumentEditor } from "@onlyoffice/document-editor-vue";
@@ -642,6 +904,7 @@ export default {
     const cameFromHistory = ref(false);
     const loading = ref(false);
     const loadingMessage = ref('');
+    const sessionLoadFailed = ref(false);
     const perspective = ref('');
     const activeAiTab = ref('summary');
     const docEditorComponent = ref(null);
@@ -666,12 +929,18 @@ export default {
     const linkedAnalysisProgress = ref([]);
     const linkedFileInput = ref(null);
     const visibleAnalysisProgress = computed(() => analysisProgress.value.slice(-6));
+    // 判断当前合同是否为 PDF（PDF 不支持原文改写/采纳）
+    const isPdfContract = computed(() => {
+        const name = String(contract.original_filename || '').toLowerCase();
+        return name.endsWith('.pdf');
+    });
     const progressStepLabels = {
       pre_analysis: '合同预分析',
       extract_text: '提取合同正文',
       knowledge_search: '检索法条与案例',
       company_search: '核验合同主体',
       llm_review: '生成审查结论',
+      seal_analysis: '印章与签章核验',
       finalize: '保存审查结果',
       failed: '分析失败',
     };
@@ -679,21 +948,119 @@ export default {
       running: '进行中',
       completed: '已完成',
       failed: '失败',
+      pending: '等待中',
       reviewed: '已审查',
       pre_analyzed: '已预分析',
       processing: '处理中',
+      queued: '排队中',
     };
     const progressStepLabel = (step) => progressStepLabels[step] || step || '处理中';
     const progressStatusLabel = (status) => progressStatusLabels[status] || status || '处理中';
     const progressStatusClass = (status) => {
       if (status === 'completed' || status === 'reviewed' || status === 'pre_analyzed') return 'completed';
       if (status === 'failed') return 'failed';
-      return 'running';
+      if (status === 'running') return 'running';
+      return 'pending';
+    };
+
+    // 异步分析进度追踪状态
+    const analysisPercent = ref(0);
+    const analysisEta = ref(0);
+    const analysisElapsed = ref(0);
+    const analysisJobId = ref(null);
+    const analysisSteps = ref([]);
+    const statusPollTimer = ref(null);
+    const analysisActive = ref(false);
+
+    const formatDuration = (seconds) => {
+      if (!seconds || seconds < 0) return '0秒';
+      if (seconds < 60) return `${seconds}秒`;
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return s > 0 ? `${m}分${s}秒` : `${m}分`;
     };
     const focusedReviewText = ref('');
     const focusedReviewQuestion = ref('');
     const focusedReviewResult = ref(null);
     const focusedReviewLoading = ref(false);
+    const focusedReviewHistory = ref([]);
+    const focusedReviewHistoryLoading = ref(false);
+    // 风险点 severity 排序与过滤
+    const severityFilter = ref('all'); // all | high | medium | low
+    const severityOrder = { high: 0, '高': 0, medium: 1, '中': 1, low: 2, '低': 2 };
+    const normalizeSeverity = (s) => {
+        const v = String(s || '').toLowerCase().trim();
+        if (['high', '高', '严重', 'critical'].includes(v)) return 'high';
+        if (['medium', '中', '一般', 'moderate'].includes(v)) return 'medium';
+        if (['low', '低', '轻微', 'minor'].includes(v)) return 'low';
+        return 'medium';
+    };
+    const severityLabel = (s) => {
+        const n = normalizeSeverity(s);
+        return { high: '高', medium: '中', low: '低' }[n];
+    };
+    const severityClass = (s) => {
+        const n = normalizeSeverity(s);
+        return {
+            high: 'bg-red-100 text-red-700 border-red-300',
+            medium: 'bg-amber-100 text-amber-700 border-amber-300',
+            low: 'bg-blue-100 text-blue-700 border-blue-300',
+        }[n];
+    };
+    const filteredAndSortedDisputePoints = computed(() => {
+        const list = reviewData.dispute_points || [];
+        const filtered = severityFilter.value === 'all'
+            ? list
+            : list.filter((item) => normalizeSeverity(item.severity) === severityFilter.value);
+        return [...filtered].sort((a, b) => {
+            const sa = severityOrder[normalizeSeverity(a.severity)] ?? 1;
+            const sb = severityOrder[normalizeSeverity(b.severity)] ?? 1;
+            return sa - sb;
+        });
+    });
+    const disputeSeverityStats = computed(() => {
+        const list = reviewData.dispute_points || [];
+        const stats = { high: 0, medium: 0, low: 0 };
+        list.forEach((item) => { stats[normalizeSeverity(item.severity)] += 1; });
+        return stats;
+    });
+    // 风险仪表盘：整体风险等级 + 各模块统计
+    const riskDashboard = computed(() => {
+        const disputes = reviewData.dispute_points || [];
+        const missing = reviewData.missing_clauses || [];
+        const breach = reviewData.breach_cost_analysis || [];
+        const party = reviewData.party_review || [];
+        const suggestions = reviewData.modification_suggestions || [];
+        const stats = disputeSeverityStats.value;
+        const total = disputes.length;
+        // 整体风险等级：有高危即为高，否则有中危即为中，否则低
+        let overallLevel = 'low';
+        let overallLabel = '低';
+        let overallClass = 'bg-green-100 text-green-700 border-green-300';
+        if (stats.high > 0) {
+            overallLevel = 'high';
+            overallLabel = '高';
+            overallClass = 'bg-red-100 text-red-700 border-red-300';
+        } else if (stats.medium > 0) {
+            overallLevel = 'medium';
+            overallLabel = '中';
+            overallClass = 'bg-amber-100 text-amber-700 border-amber-300';
+        }
+        return {
+            total,
+            stats,
+            overallLevel,
+            overallLabel,
+            overallClass,
+            moduleCounts: {
+                disputes: total,
+                missing: missing.length,
+                breach: breach.length,
+                party: party.length,
+                suggestions: suggestions.length,
+            },
+        };
+    });
     const reviewTemplates = ref([]);
     const selectedTemplateId = ref('general');
 
@@ -725,20 +1092,52 @@ export default {
 
         socket.value.on('analysis-complete', (data) => {
             console.log('Received real-time analysis update');
+            analysisActive.value = false;
+            analysisPercent.value = 100;
+            reAnalyzing.value = false;
+            stopStatusPolling();
             ElMessage.success({
-                message: `协同审查结果已更新（立场：${data.perspective || '未指定'}）。`,
-                duration: 5000
+                message: `审查完成（立场：${data.perspective || '未指定'}）。`,
+                duration: 3000
             });
             Object.assign(reviewData, data.results || data);
             if (data.perspective) perspective.value = data.perspective;
+            loading.value = false;
+            activeStep.value = 2;
         });
 
         socket.value.on('analysis-progress', (data) => {
             analysisProgress.value.push(data);
+            if (typeof data.percent === 'number') analysisPercent.value = data.percent;
+            if (typeof data.estimatedRemainingSeconds === 'number') analysisEta.value = data.estimatedRemainingSeconds;
+            if (typeof data.elapsedSeconds === 'number') analysisElapsed.value = data.elapsedSeconds;
+            if (Array.isArray(data.steps)) {
+                analysisSteps.value = data.steps;
+            } else if (data.step && data.status) {
+                // 后端推送的是单步进度事件，更新对应步骤的状态
+                const stepKey = data.step;
+                const stepStatus = data.status;
+                analysisSteps.value = analysisSteps.value.map((s) =>
+                    s.key === stepKey ? { ...s, status: stepStatus, message: data.message || s.message || '' } : s
+                );
+            }
             if (data.partialResult) {
                 Object.assign(reviewData, data.partialResult);
             }
             loadingMessage.value = data.message || loadingMessage.value;
+        });
+
+        socket.value.on('analysis-failed', (data) => {
+            analysisActive.value = false;
+            loading.value = false;
+            reAnalyzing.value = false;
+            stopStatusPolling();
+            ElMessage.error(data?.error || '分析失败，请稍后重试');
+        });
+
+        socket.value.on('disconnect', () => {
+            // 断线时启动轮询恢复
+            if (analysisActive.value) startStatusPolling();
         });
     };
 
@@ -750,6 +1149,126 @@ export default {
       template_id: '',
       template_name: '',
     });
+    const showContractPreview = ref(false);
+    const contractPreviewText = computed(() => {
+        const preview = preAnalysisData.text_stats?.preview;
+        if (preview) return preview;
+        return '暂无预览内容。';
+    });
+    // --- Inline Q&A Chat Widget ---
+    const qaPanelOpen = ref(false);
+    const qaInput = ref('');
+    const qaMessages = ref([]);
+    const qaLoading = ref(false);
+    const qaChatBody = ref(null);
+    const qaSessionId = ref(localStorage.getItem('qa_session_id') || uuidv4());
+    if (!localStorage.getItem('qa_session_id')) {
+        localStorage.setItem('qa_session_id', qaSessionId.value);
+    }
+    const escapeQaHtml = (text) => String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    const renderQaMarkdown = (text) => marked.parse(escapeQaHtml(text));
+    const scrollQaToBottom = async () => {
+        await nextTick();
+        if (qaChatBody.value) qaChatBody.value.scrollTop = qaChatBody.value.scrollHeight;
+    };
+    const toggleQaPanel = async () => {
+        qaPanelOpen.value = !qaPanelOpen.value;
+        if (qaPanelOpen.value) {
+            await scrollQaToBottom();
+        }
+    };
+    const parseQaSseEvent = (eventText) => {
+        const eventLine = eventText.split('\n').find((line) => line.startsWith('event:'));
+        const dataLines = eventText
+            .split('\n')
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.replace('data:', '').trim());
+        if (!dataLines.length) return null;
+        return {
+            event: eventLine?.replace('event:', '').trim(),
+            data: JSON.parse(dataLines.join('\n')),
+        };
+    };
+    const buildQaHistory = () => qaMessages.value
+        .filter((m) => ['user', 'assistant'].includes(m.role) && String(m.content || '').trim())
+        .slice(-12)
+        .map((m) => ({ role: m.role, content: String(m.content || '').slice(0, 4000) }));
+    const sendQaMessage = async () => {
+        if (!qaInput.value.trim() || qaLoading.value) return;
+        const question = qaInput.value.trim();
+        const history = buildQaHistory();
+        qaInput.value = '';
+        qaMessages.value.push({ role: 'user', content: question });
+        // 使用索引通过响应式数组修改消息，确保打字机效果实时渲染
+        const assistantIdx = qaMessages.value.length;
+        qaMessages.value.push({ role: 'assistant', content: '' });
+        await scrollQaToBottom();
+        qaLoading.value = true;
+        try {
+            const response = await fetch(api.getQaStreamUrl(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-ID': getUserId() || '',
+                },
+                body: JSON.stringify({
+                    question,
+                    sessionId: qaSessionId.value,
+                    contractId: contract.id,
+                    history,
+                }),
+            });
+            if (!response.ok || !response.body) throw new Error('STREAM_FAILED');
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || '';
+                for (const eventText of events) {
+                    const parsed = parseQaSseEvent(eventText);
+                    if (!parsed) continue;
+                    if (parsed.event === 'delta') {
+                        // 通过响应式数组索引修改，触发 Vue 响应式更新
+                        qaMessages.value[assistantIdx].content += parsed.data.content || '';
+                        scrollQaToBottom();
+                    }
+                    if (parsed.event === 'done' && parsed.data.answer) {
+                        qaMessages.value[assistantIdx].content = parsed.data.answer;
+                    }
+                    if (parsed.event === 'error') throw new Error(parsed.data.error || 'STREAM_FAILED');
+                }
+            }
+            if (!qaMessages.value[assistantIdx].content.trim()) {
+                qaMessages.value[assistantIdx].content = '未收到有效回答。';
+            }
+        } catch {
+            ElMessage.error('问答请求失败，请稍后重试');
+            qaMessages.value[assistantIdx].content = '抱歉，我现在无法回答您的问题。';
+        } finally {
+            qaLoading.value = false;
+            scrollQaToBottom();
+        }
+    };
+    const handleQaEnter = (event) => {
+        if (!event.shiftKey) sendQaMessage();
+    };
+    const clearQaChat = () => {
+        qaMessages.value = [];
+        qaSessionId.value = uuidv4();
+        localStorage.setItem('qa_session_id', qaSessionId.value);
+        qaInput.value = '';
+        qaLoading.value = false;
+        ElMessage.success('已清空当前会话记录');
+    };
     const selectedReviewPoints = ref([]);
     const customPurposes = ref([{ value: '' }]);
 
@@ -827,6 +1346,11 @@ export default {
         const isValid = ['docx', 'pdf'].includes(ext);
         if (!isValid) {
             ElMessage.error('只能上传 DOCX 或 PDF 格式的文件！');
+            return false;
+        }
+        const maxSize = 50 * 1024 * 1024; // 50MB
+        if (file.size > maxSize) {
+            ElMessage.error('文件大小超过 50MB 限制，请压缩或拆分后上传。');
             return false;
         }
         loading.value = true;
@@ -985,15 +1509,58 @@ export default {
       isEditorReady.value = false;
     };
 
+    const startStatusPolling = () => {
+        if (statusPollTimer.value) return;
+        statusPollTimer.value = setInterval(async () => {
+            if (!contract.id) return;
+            try {
+                const res = await api.getAnalyzeStatus(contract.id);
+                const data = res.data;
+                if (typeof data.percent === 'number') analysisPercent.value = data.percent;
+                if (Array.isArray(data.steps)) analysisSteps.value = data.steps;
+                if (typeof data.elapsedSeconds === 'number') analysisElapsed.value = data.elapsedSeconds;
+                if (data.status === 'completed' && data.result) {
+                    Object.assign(reviewData, data.result);
+                    analysisActive.value = false;
+                    loading.value = false;
+                    reAnalyzing.value = false;
+                    activeStep.value = 2;
+                    stopStatusPolling();
+                    ElMessage.success('审查完成。');
+                } else if (data.status === 'failed') {
+                    analysisActive.value = false;
+                    loading.value = false;
+                    reAnalyzing.value = false;
+                    stopStatusPolling();
+                    ElMessage.error(data.error || '分析失败，请稍后重试');
+                }
+            } catch (err) {
+                console.warn('[Status Poll] Failed to fetch analysis status:', err.message);
+            }
+        }, 3000);
+    };
+
+    const stopStatusPolling = () => {
+        if (statusPollTimer.value) {
+            clearInterval(statusPollTimer.value);
+            statusPollTimer.value = null;
+        }
+    };
+
     const startAnalysis = async () => {
         if (!perspective.value) {
             ElMessage.warning('请输入您的审查立场。');
             return;
         }
         loading.value = true;
-        loadingMessage.value = 'AI正在深度审查合同，这可能需要1-2分钟...';
+        analysisActive.value = true;
+        analysisPercent.value = 0;
+        analysisEta.value = 0;
+        analysisElapsed.value = 0;
+        analysisProgress.value = [];
+        analysisSteps.value = [];
+        loadingMessage.value = 'AI 正在深度审查合同，请通过下方进度追踪实时查看状态...';
         try {
-            // This is the new, more complete payload
             const analysisPayload = {
                 contractId: contract.id,
                 userPerspective: perspective.value,
@@ -1002,20 +1569,25 @@ export default {
                     potential_parties: allPotentialParties.value,
                     suggested_review_points: allSuggestedReviewPoints.value,
                     suggested_core_purposes: allSuggestedCorePurposes.value,
-                    // Pass the *selected* points and purposes for the AI to focus on
                     reviewPoints: selectedReviewPoints.value,
                     core_purposes: customPurposes.value.map(p => p.value).filter(p => p.trim() !== ''),
                     template_id: selectedTemplateId.value,
                 },
             };
+            // 异步启动：后端立即返回 jobId，实际结果通过 socket 推送
             const res = await api.analyzeContract(analysisPayload);
-            Object.assign(reviewData, res.data);
-            activeStep.value = 2;
+            analysisJobId.value = res.data.jobId;
+            if (Array.isArray(res.data.steps)) {
+                analysisSteps.value = res.data.steps.map((s) => ({ ...s, status: 'pending', message: '' }));
+            }
+            // 若 socket 未连接，启动轮询作为兜底
+            if (!socket.value || !socket.value.connected) {
+                startStatusPolling();
+            }
         } catch(err) {
-            // More specific error handling
-            const errorMessage = err.response?.data?.error || '分析失败，请稍后重试';
+            const errorMessage = err.response?.data?.error || '启动分析失败，请稍后重试';
             ElMessage.error(errorMessage);
-        } finally {
+            analysisActive.value = false;
             loading.value = false;
         }
     };
@@ -1104,8 +1676,15 @@ export default {
         return;
       }
       reAnalyzing.value = true;
+      loading.value = true;
+      analysisActive.value = true;
+      analysisPercent.value = 0;
+      analysisEta.value = 0;
+      analysisElapsed.value = 0;
+      analysisProgress.value = [];
+      analysisSteps.value = [];
+      loadingMessage.value = '正在重新审查合同，请通过进度追踪查看状态...';
       try {
-        // Use the same, new payload structure for re-analysis
         const analysisPayload = {
           contractId: contract.id,
           userPerspective: perspective.value,
@@ -1114,21 +1693,26 @@ export default {
                 potential_parties: allPotentialParties.value,
                 suggested_review_points: allSuggestedReviewPoints.value,
                 suggested_core_purposes: allSuggestedCorePurposes.value,
-                // Pass the *selected* points and purposes for the AI to focus on
                 reviewPoints: selectedReviewPoints.value,
                 core_purposes: customPurposes.value.map(p => p.value).filter(p => p.trim() !== ''),
                 template_id: selectedTemplateId.value,
             },
         };
         const res = await api.analyzeContract(analysisPayload);
-        Object.assign(reviewData, res.data);
-        ElMessage.success('重审完成！');
-        activeAiTab.value = 'suggestions'; // Switch to the first tab to show results
+        analysisJobId.value = res.data.jobId;
+        if (Array.isArray(res.data.steps)) {
+            analysisSteps.value = res.data.steps.map((s) => ({ ...s, status: 'pending', message: '' }));
+        }
+        if (!socket.value || !socket.value.connected) {
+            startStatusPolling();
+        }
+        // 结果通过 socket analysis-complete 事件或轮询更新，此处不等待
       } catch(err) {
         const errorMessage = err.response?.data?.error || '重审失败，请稍后重试';
         ElMessage.error(errorMessage);
-      } finally {
         reAnalyzing.value = false;
+        loading.value = false;
+        analysisActive.value = false;
       }
     };
 
@@ -1160,6 +1744,9 @@ export default {
 
             // Save this loaded state to localStorage so a refresh works correctly
             saveState();
+
+            // 加载该合同的专项审查历史
+            loadFocusedReviewHistory();
 
         } catch (error) {
             console.error(`Failed to load contract ${contractId} from server:`, error);
@@ -1218,6 +1805,40 @@ export default {
         allSuggestedCorePurposes,
     ], saveState, { deep: true });
 
+    const restoreSessionFromSavedState = async (savedState) => {
+        // Fetch fresh contract editorConfig from the server to get a new, valid token.
+        const response = await api.getContractDetails(savedState.contract.id);
+        const serverEditorConfig = response.data.contract.editorConfig;
+
+        // Restore UI state from localStorage, as it's the source of truth for user's work.
+        activeStep.value = savedState.activeStep;
+        activeAiTab.value = savedState.activeAiTab || 'suggestions';
+        if (!['summary', 'suggestions', 'knowledge', 'workspace'].includes(activeAiTab.value)) {
+          activeAiTab.value = 'summary';
+        }
+
+        // Restore data objects from savedState
+        Object.assign(contract, savedState.contract);
+        // CRITICAL: Overwrite with the fresh editor config from the server.
+        contract.editorConfig = serverEditorConfig;
+        setupSocket(contract.id);
+
+        perspective.value = savedState.perspective;
+        Object.assign(preAnalysisData, savedState.preAnalysisData || {});
+        selectedTemplateId.value = savedState.selectedTemplateId || preAnalysisData.template_id || 'general';
+        Object.assign(reviewData, savedState.reviewData || {});
+
+        // Restore lists from savedState
+        selectedReviewPoints.value = savedState.selectedReviewPoints || [];
+        customPurposes.value = savedState.customPurposes || [{ value: '' }];
+        allSuggestedReviewPoints.value = savedState.allSuggestedReviewPoints || [];
+        allPotentialParties.value = savedState.allPotentialParties || [];
+        allSuggestedCorePurposes.value = savedState.allSuggestedCorePurposes || [];
+
+        // 恢复会话后加载该合同的专项审查历史
+        loadFocusedReviewHistory();
+    };
+
     const loadState = async () => {
         const savedStateJSON = localStorage.getItem('review_session');
         if (savedStateJSON) {
@@ -1226,41 +1847,15 @@ export default {
                 if (savedState.contract && savedState.contract.id) {
                     loading.value = true;
                     loadingMessage.value = '正在恢复您的会话...';
+                    sessionLoadFailed.value = false;
 
                     try {
-                        // Fetch fresh contract editorConfig from the server to get a new, valid token.
-                        const response = await api.getContractDetails(savedState.contract.id);
-                        const serverEditorConfig = response.data.contract.editorConfig;
-
-                        // Restore UI state from localStorage, as it's the source of truth for user's work.
-                        activeStep.value = savedState.activeStep;
-                        activeAiTab.value = savedState.activeAiTab || 'suggestions';
-                        if (!['summary', 'suggestions', 'knowledge', 'workspace'].includes(activeAiTab.value)) {
-                          activeAiTab.value = 'summary';
-                        }
-
-                        // Restore data objects from savedState
-                        Object.assign(contract, savedState.contract);
-                        // CRITICAL: Overwrite with the fresh editor config from the server.
-                        contract.editorConfig = serverEditorConfig;
-                        setupSocket(contract.id);
-
-                        perspective.value = savedState.perspective;
-                        Object.assign(preAnalysisData, savedState.preAnalysisData || {});
-                        selectedTemplateId.value = savedState.selectedTemplateId || preAnalysisData.template_id || 'general';
-                        Object.assign(reviewData, savedState.reviewData || {});
-
-                        // Restore lists from savedState
-                        selectedReviewPoints.value = savedState.selectedReviewPoints || [];
-                        customPurposes.value = savedState.customPurposes || [{ value: '' }];
-                        allSuggestedReviewPoints.value = savedState.allSuggestedReviewPoints || [];
-                        allPotentialParties.value = savedState.allPotentialParties || [];
-                        allSuggestedCorePurposes.value = savedState.allSuggestedCorePurposes || [];
-
+                        await restoreSessionFromSavedState(savedState);
                     } catch (error) {
                          console.error(`Failed to refresh session for contract ${savedState.contract.id}:`, error);
-                         ElMessage.error('刷新会话失败，将重置状态。');
-                         resetState(); // Clear the invalid session
+                         // 不再直接 resetState()，保留 localStorage 会话，提供重试入口
+                         sessionLoadFailed.value = true;
+                         ElMessage.error('恢复会话失败（可能是网络问题）。可点击"重试"重新加载，您的工作进度已保留。');
                     } finally {
                         loading.value = false;
                     }
@@ -1269,6 +1864,27 @@ export default {
                 console.error("Failed to parse saved state, clearing invalid session.", e);
                 localStorage.removeItem('review_session');
             }
+        }
+    };
+
+    // 重试恢复会话（不丢失工作进度）
+    const retryLoadSession = async () => {
+        const savedStateJSON = localStorage.getItem('review_session');
+        if (!savedStateJSON) {
+            sessionLoadFailed.value = false;
+            return;
+        }
+        loading.value = true;
+        loadingMessage.value = '正在重试恢复会话...';
+        try {
+            const savedState = JSON.parse(savedStateJSON);
+            await restoreSessionFromSavedState(savedState);
+            sessionLoadFailed.value = false;
+            ElMessage.success('会话恢复成功。');
+        } catch (error) {
+            ElMessage.error('重试失败，请检查网络后再次点击重试。');
+        } finally {
+            loading.value = false;
         }
     };
 
@@ -1354,9 +1970,17 @@ export default {
         }
     };
 
+    // 在当前页面打开智能问答浮窗，不再跳转页面
+    const goToQnA = () => {
+        forceSaveCurrentDocument(true);
+        qaPanelOpen.value = true;
+        scrollQaToBottom();
+    };
+
     onUnmounted(() => {
         stopAutoForceSave();
         forceSaveCurrentDocument(true);
+        stopStatusPolling();
         if (socket.value) socket.value.disconnect();
     });
 
@@ -1713,12 +2337,57 @@ export default {
                 perspective: perspective.value,
                 contractType: preAnalysisData.contract_type,
                 templateId: selectedTemplateId.value,
+                contractId: contract.id,
             });
             focusedReviewResult.value = response.data;
+            // 重新加载历史列表以包含新保存的记录
+            if (contract.id) loadFocusedReviewHistory();
         } catch (error) {
             ElMessage.error(error.response?.data?.error || '专项审查失败，请稍后重试。');
         } finally {
             focusedReviewLoading.value = false;
+        }
+    };
+
+    const loadFocusedReviewHistory = async () => {
+        if (!contract.id) return;
+        focusedReviewHistoryLoading.value = true;
+        try {
+            const response = await api.getFocusedReviews(contract.id);
+            focusedReviewHistory.value = response.data.items || [];
+        } catch (error) {
+            // 静默失败，不影响主流程
+            console.warn('Failed to load focused review history:', error);
+        } finally {
+            focusedReviewHistoryLoading.value = false;
+        }
+    };
+
+    const loadFocusedReviewFromHistory = (item) => {
+        focusedReviewText.value = item.source_text || '';
+        focusedReviewQuestion.value = item.question || '';
+        focusedReviewResult.value = item.result || null;
+        ElMessage.success('已加载历史专项审查记录。');
+    };
+
+    const deleteFocusedReviewFromHistory = async (reviewId) => {
+        try {
+            await api.deleteFocusedReview(reviewId);
+            focusedReviewHistory.value = focusedReviewHistory.value.filter((i) => i.id !== reviewId);
+            ElMessage.success('已删除该条历史记录。');
+        } catch (error) {
+            ElMessage.error(error.response?.data?.error || '删除失败，请稍后重试。');
+        }
+    };
+
+    const formatHistoryTime = (timeStr) => {
+        if (!timeStr) return '';
+        try {
+            const d = new Date(timeStr);
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } catch {
+            return timeStr;
         }
     };
 
@@ -1868,6 +2537,8 @@ export default {
       activeStep,
       loading,
       loadingMessage,
+      sessionLoadFailed,
+      retryLoadSession,
       contract,
       perspective,
       reviewData,
@@ -1886,11 +2557,30 @@ export default {
       goBackToUpload,
       goBackToConfirm,
       startAnalysis,
+      analysisPercent,
+      analysisEta,
+      analysisElapsed,
+      analysisActive,
+      analysisSteps,
+      analysisJobId,
+      formatDuration,
       docEditorComponent,
       isEditorReady,
       preAnalysisData,
       selectedReviewPoints,
       customPurposes,
+      showContractPreview,
+      contractPreviewText,
+      qaPanelOpen,
+      qaInput,
+      qaMessages,
+      qaLoading,
+      qaChatBody,
+      toggleQaPanel,
+      sendQaMessage,
+      handleQaEnter,
+      clearQaChat,
+      renderQaMarkdown,
       addPurpose,
       removePurpose,
       reAnalyzing,
@@ -1898,6 +2588,7 @@ export default {
       uploadAndGo,
       cameFromHistory,
       goBackSmart,
+      goToQnA,
       onlyOfficeUrl,
       allSuggestedReviewPoints,
       allPotentialParties,
@@ -1912,6 +2603,11 @@ export default {
       focusedReviewQuestion,
       focusedReviewResult,
       focusedReviewLoading,
+      focusedReviewHistory,
+      focusedReviewHistoryLoading,
+      loadFocusedReviewFromHistory,
+      deleteFocusedReviewFromHistory,
+      formatHistoryTime,
       disputeTitle,
       disputeDescription,
       missingClauseTitle,
@@ -1930,6 +2626,14 @@ export default {
       adoptSuggestion,
       analysisProgress,
       visibleAnalysisProgress,
+      isPdfContract,
+      severityFilter,
+      filteredAndSortedDisputePoints,
+      disputeSeverityStats,
+      riskDashboard,
+      normalizeSeverity,
+      severityLabel,
+      severityClass,
       progressStepLabel,
       progressStatusLabel,
       progressStatusClass,
@@ -2050,6 +2754,30 @@ export default {
 .analysis-progress__item--running .analysis-progress__marker {
   border-color: #2563eb;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.analysis-progress__item--pending .analysis-progress__marker {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.analysis-progress__item--pending .analysis-progress__status {
+  color: #94a3b8;
+}
+
+.analysis-progress__spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(37, 99, 235, 0.3);
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: analysis-spin 0.8s linear infinite;
+}
+
+@keyframes analysis-spin {
+  to { transform: rotate(360deg); }
 }
 
 .analysis-progress__item--completed .analysis-progress__marker {
@@ -2290,6 +3018,201 @@ export default {
 
   .linked-analysis-panel__button {
     width: 100%;
+  }
+}
+
+/* --- Inline Q&A Chat Widget --- */
+.qa-chat-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+}
+
+.reanalysis-progress .analysis-progress {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.qa-chat-widget__fab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
+  justify-content: center;
+}
+
+.qa-chat-widget__fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.45);
+}
+
+.qa-chat-widget__fab-badge {
+  display: none;
+}
+
+.qa-chat-widget__panel {
+  width: 400px;
+  height: 520px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 120px);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.qa-chat-widget__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.qa-chat-widget__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
+}
+
+.qa-chat-widget__empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.qa-chat-widget__msg {
+  display: flex;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.qa-chat-widget__msg--user {
+  justify-content: flex-end;
+}
+
+.qa-chat-widget__msg--assistant {
+  justify-content: flex-start;
+}
+
+.qa-chat-widget__bubble {
+  max-width: 85%;
+  min-width: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #e5e7eb;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.qa-chat-widget__msg--user .qa-chat-widget__bubble {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: none;
+}
+
+.qa-chat-widget__role {
+  margin: 0 0 3px;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.qa-chat-widget__content {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.qa-chat-widget__content :deep(p) {
+  margin: 0 0 4px;
+}
+
+.qa-chat-widget__content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.qa-chat-widget__typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+}
+
+.qa-chat-widget__typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: qa-typing-pulse 1s infinite ease-in-out;
+}
+
+.qa-chat-widget__typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.qa-chat-widget__typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes qa-typing-pulse {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+.qa-chat-widget__footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.qa-chat-widget__footer .el-input {
+  flex: 1;
+}
+
+.qa-chat-widget__send {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.qa-chat-widget__send:disabled {
+  background: #a3a3a3;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .qa-chat-widget__panel {
+    width: calc(100vw - 32px);
+    height: calc(100vh - 100px);
   }
 }
 </style>

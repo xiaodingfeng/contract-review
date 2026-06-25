@@ -104,7 +104,8 @@ export default {
 
     const loadHistory = async () => {
       try {
-        const response = await api.getQAHistory(sessionId.value);
+        // 按当前选中的合同过滤历史，使不同合同的问答相互独立
+        const response = await api.getQAHistory(sessionId.value, selectedContractId.value);
         messages.value = response.data;
         scrollToBottom();
       } catch {
@@ -140,8 +141,9 @@ export default {
       const history = buildRequestHistory();
       inputQuestion.value = '';
       messages.value.push({ role: 'user', content: question });
-      const assistantMessage = { role: 'assistant', content: '' };
-      messages.value.push(assistantMessage);
+      // 使用索引通过响应式数组修改消息，确保打字机效果实时渲染
+      const assistantIdx = messages.value.length;
+      messages.value.push({ role: 'assistant', content: '' });
       await scrollToBottom();
 
       isLoading.value = true;
@@ -174,19 +176,22 @@ export default {
             const parsed = parseSseEvent(eventText);
             if (!parsed) continue;
             if (parsed.event === 'delta') {
-              assistantMessage.content += parsed.data.content || '';
+              // 通过响应式数组索引修改，触发 Vue 响应式更新
+              messages.value[assistantIdx].content += parsed.data.content || '';
               scrollToBottom();
             }
             if (parsed.event === 'done' && parsed.data.answer) {
-              assistantMessage.content = parsed.data.answer;
+              messages.value[assistantIdx].content = parsed.data.answer;
             }
             if (parsed.event === 'error') throw new Error(parsed.data.error || 'STREAM_FAILED');
           }
         }
-        if (!assistantMessage.content.trim()) assistantMessage.content = '未收到有效回答。';
+        if (!messages.value[assistantIdx].content.trim()) {
+          messages.value[assistantIdx].content = '未收到有效回答。';
+        }
       } catch {
         ElMessage.error('问答请求失败，请稍后重试');
-        assistantMessage.content = '抱歉，我现在无法回答您的问题。';
+        messages.value[assistantIdx].content = '抱歉，我现在无法回答您的问题。';
       } finally {
         isLoading.value = false;
         scrollToBottom();
@@ -337,6 +342,7 @@ h1 {
 .message-row {
   display: flex;
   margin-bottom: 10px;
+  min-width: 0;
 }
 
 .message-row.user {
@@ -348,11 +354,14 @@ h1 {
 }
 
 .message-bubble {
-  max-width: min(820px, 86%);
+  max-width: min(720px, 80%);
+  min-width: 0;
   border-radius: 8px;
   padding: 10px 12px;
   background: #ffffff;
   box-shadow: inset 0 0 0 1px #e5e5e5, 0 8px 22px rgba(0, 0, 0, 0.04);
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .message-row.user .message-bubble {
@@ -404,6 +413,8 @@ h1 {
   color: inherit;
   font-size: 13px;
   line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .prose :deep(p) {

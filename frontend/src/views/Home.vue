@@ -41,17 +41,44 @@
           <button class="secondary-button" @click="fetchHistory">刷新</button>
         </div>
 
+        <!-- 搜索与筛选 -->
+        <div v-if="history.length > 0" class="history-filters">
+          <input
+            v-model="searchKeyword"
+            class="history-search-input"
+            type="text"
+            placeholder="按文件名搜索..."
+          />
+          <select v-model="statusFilter" class="history-filter-select">
+            <option value="">全部状态</option>
+            <option value="Reviewed">已完成</option>
+            <option value="Uploaded">已上传</option>
+            <option value="PreAnalyzed">待确认</option>
+          </select>
+          <select v-model="typeFilter" class="history-filter-select">
+            <option value="">全部类型</option>
+            <option v-for="t in availableContractTypes" :key="t" :value="t">{{ t }}</option>
+          </select>
+        </div>
+
         <div v-if="loading" class="empty-block">正在加载审查记录...</div>
         <div v-else-if="error" class="empty-block danger">{{ error }}</div>
         <div v-else-if="history.length === 0" class="empty-block">
           <h3>暂无审查记录</h3>
           <p>开始审查后，记录会显示在这里。</p>
         </div>
+        <div v-else-if="filteredHistory.length === 0" class="empty-block">
+          <h3>未匹配到记录</h3>
+          <p>请调整搜索关键词或筛选条件。</p>
+        </div>
         <div v-else class="table-wrap">
           <table class="record-table">
             <thead>
               <tr>
                 <th>文件</th>
+                <th>合同类型</th>
+                <th>立场</th>
+                <th>风险</th>
                 <th>时间</th>
                 <th>状态</th>
                 <th>操作</th>
@@ -62,6 +89,12 @@
                 <td class="file-cell" :title="item.original_filename">
                   <span v-if="item.record_type === 'group'" class="record-type">多合同</span>
                   {{ item.original_filename }}
+                </td>
+                <td class="type-cell">{{ item.contract_type || '—' }}</td>
+                <td class="perspective-cell">{{ item.perspective || '—' }}</td>
+                <td class="risk-cell">
+                  <span v-if="item.risk_count > 0" class="risk-pill">{{ item.risk_count }}</span>
+                  <span v-else>—</span>
                 </td>
                 <td>{{ formatDate(item.created_at) }}</td>
                 <td><span :class="['status-pill', item.status]">{{ statusText(item.status) }}</span></td>
@@ -130,7 +163,7 @@
 </template>
 
 <script>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElPopconfirm } from 'element-plus';
 import api from '../api';
@@ -149,6 +182,28 @@ export default {
     const groupReportLoading = ref(false);
     const groupReport = ref(null);
     const router = useRouter();
+    // 搜索与筛选
+    const searchKeyword = ref('');
+    const statusFilter = ref('');
+    const typeFilter = ref('');
+
+    const availableContractTypes = computed(() => {
+        const types = new Set();
+        history.value.forEach((item) => {
+            if (item.contract_type) types.add(item.contract_type);
+        });
+        return Array.from(types).sort();
+    });
+
+    const filteredHistory = computed(() => {
+        const kw = searchKeyword.value.trim().toLowerCase();
+        return history.value.filter((item) => {
+            if (kw && !String(item.original_filename || '').toLowerCase().includes(kw)) return false;
+            if (statusFilter.value && item.status !== statusFilter.value) return false;
+            if (typeFilter.value && item.contract_type !== typeFilter.value) return false;
+            return true;
+        });
+    });
 
     const workflow = [
       { step: '01', title: '上传合同', color: '#3b82f6', copy: '选择文件，进入在线预览。' },
@@ -157,10 +212,10 @@ export default {
       { step: '04', title: '采纳修改', color: '#111111', copy: '把修改同步到文档。' },
     ];
 
-    const totalHistoryPages = computed(() => Math.max(1, Math.ceil(history.value.length / historyPageSize)));
+    const totalHistoryPages = computed(() => Math.max(1, Math.ceil(filteredHistory.value.length / historyPageSize)));
     const pagedHistory = computed(() => {
       const start = (historyPage.value - 1) * historyPageSize;
-      return history.value.slice(start, start + historyPageSize);
+      return filteredHistory.value.slice(start, start + historyPageSize);
     });
 
     const fetchHistory = async () => {
@@ -243,6 +298,9 @@ export default {
 
     onMounted(fetchHistory);
 
+    // 筛选条件变化时回到第一页
+    watch([searchKeyword, statusFilter, typeFilter], () => { historyPage.value = 1; });
+
     return {
       workflow,
       history,
@@ -261,6 +319,11 @@ export default {
       closeGroupReport,
       deleteReport,
       startNewReview,
+      searchKeyword,
+      statusFilter,
+      typeFilter,
+      availableContractTypes,
+      filteredHistory,
     };
   },
 };
@@ -486,26 +549,6 @@ button:disabled {
   background: #fafafa;
 }
 
-.record-table th:nth-child(1),
-.record-table td:nth-child(1) {
-  width: 44%;
-}
-
-.record-table th:nth-child(2),
-.record-table td:nth-child(2) {
-  width: 22%;
-}
-
-.record-table th:nth-child(3),
-.record-table td:nth-child(3) {
-  width: 14%;
-}
-
-.record-table th:nth-child(4),
-.record-table td:nth-child(4) {
-  width: 20%;
-}
-
 .file-cell {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -544,6 +587,62 @@ button:disabled {
 .status-pill.PreAnalyzed {
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.history-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.history-search-input,
+.history-filter-select {
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+}
+
+.history-search-input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.history-search-input:focus,
+.history-filter-select:focus {
+  border-color: #3b82f6;
+}
+
+.history-filter-select {
+  cursor: pointer;
+}
+
+.type-cell,
+.perspective-cell {
+  color: #666;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.risk-cell {
+  text-align: center;
+}
+
+.risk-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .row-actions,

@@ -110,7 +110,7 @@ const buildSystemPrompt = () => [
     'Legal provisions, case documents, and internal rules must come from the provided knowledge base results. If evidence is insufficient, say that the current knowledge base did not retrieve enough support.',
     'Public web search results are only clues. If a result is verified=false, do not use it as a confirmed conclusion.',
     'For company/entity checks, tell the user to verify final facts through official channels such as the National Enterprise Credit Information Publicity System, regulators, or court websites.',
-    'For private personal data, credentials, security bypasses, or offensive requests, refuse that part and suggest a lawful verification channel.',
+    'For private personal data, credentials, security bypasses, or offensive requests, refuse that part and suggest a lawful verification channel. Please Respond in Chinese.',
 ].join('\n');
 
 const buildEvidencePrompt = ({ contextText, knowledgeResults, webResults, toolTrace }) => {
@@ -188,9 +188,20 @@ const saveMessage = (sessionId, role, content, contractId) => db('qa_history').i
 
 router.get('/history/:sessionId', async (req, res) => {
     try {
-        const history = await db('qa_history')
-            .where({ session_id: req.params.sessionId })
-            .orderBy('created_at', 'asc');
+        const query = db('qa_history')
+            .where({ session_id: req.params.sessionId });
+        // 支持按 contract_id 过滤，使不同合同的问答历史相互独立
+        const contractId = req.query.contractId || req.query.contract_id;
+        if (contractId !== undefined && contractId !== '' && contractId !== 'null') {
+            const numId = Number(contractId);
+            if (Number.isInteger(numId) && numId > 0) {
+                query.andWhere({ contract_id: numId });
+            } else {
+                // contractId 为 0 或 'none' 时，只返回未关联合同的历史
+                query.whereNull('contract_id');
+            }
+        }
+        const history = await query.orderBy('created_at', 'asc');
         res.json(history);
     } catch (error) {
         res.status(500).json({ error: 'Failed to retrieve Q&A history.' });

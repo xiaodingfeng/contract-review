@@ -97,6 +97,25 @@ async function resetAndRebuildDatabase() {
         console.log('[DB Init] New `qa_history` table created successfully.');
     }
 
+    const hasFocusedReviewsTable = await db.schema.hasTable('focused_reviews');
+    if (!hasFocusedReviewsTable) {
+        console.log('[DB Init] Creating new `focused_reviews` table...');
+        await db.schema.createTable('focused_reviews', (table) => {
+            table.increments('id').primary();
+            table.integer('contract_id').unsigned().notNullable().references('id').inTable('contracts').onDelete('CASCADE');
+            table.integer('user_id').unsigned().references('id').inTable('users').onDelete('SET NULL');
+            table.text('source_text').notNullable();
+            table.string('question');
+            table.string('perspective');
+            table.string('contract_type');
+            table.string('template_id');
+            table.text('result').notNullable(); // JSON string of the focused review result
+            table.timestamps(true, true);
+            table.index(['contract_id', 'created_at']);
+        });
+        console.log('[DB Init] New `focused_reviews` table created successfully.');
+    }
+
     await ensureVectorStore();
     await seedLawsFromMarkdown();
     await seedCasesFromJson();
