@@ -424,7 +424,7 @@
                     <div v-if="reviewData.relevant_laws && reviewData.relevant_laws.length > 0" class="space-y-4">
                         <div v-for="(item, index) in reviewData.relevant_laws" :key="'law-' + index" class="p-4 bg-blue-50 rounded-md border border-blue-100">
                             <div class="flex justify-between gap-3">
-                                <p class="font-bold text-blue-900">【{{ item.law }}】第 {{ item.clause }} 条</p>
+                                <p class="font-bold text-blue-900">【{{ item.law }}】{{ item.clause }}</p>
                                 <el-tag :type="item.hasUpdate ? 'warning' : 'success'" size="small">
                                     {{ item.hasUpdate ? '需关注更新' : '当前可参考' }}
                                 </el-tag>

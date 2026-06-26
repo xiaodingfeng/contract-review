@@ -13,10 +13,13 @@ const AdmZip = require('adm-zip');
 const PDFDocument = require('pdfkit');
 const { createWorker } = require('tesseract.js');
 const db = require('../database');
-const { searchVectorDocuments } = require('../services/vectorStore');
+const { searchVectorDocumentsMulti, splitIntoParagraphGroups } = require('../services/vectorStore');
 const { getTemplateById, matchTemplate } = require('../services/reviewTemplates');
 const { extractCompanyNames, searchCompanyInfo } = require('../services/webSearch');
 const { createChatCompletion } = require('../services/llmClient');
+
+// 合同正文段落 chunk 检索上限：0 = 不限；超过部分不再生成子 query，控制长合同的检索成本
+const CONTRACT_CHUNK_MAX = Math.max(0, Number(process.env.CONTRACT_CHUNK_MAX || 0));
 
 const router = express.Router();
 
@@ -885,48 +888,139 @@ const compactText = (value, maxLength = 4000) => String(value || '')
     .trim()
     .slice(0, maxLength);
 
-const buildKnowledgeSearchQuery = ({
-    text = '',
+// 通道 A「审查维度」query 构建：合同类型+立场、每个审查点、每个核心目的、用户问题
+// 这些是法律语言，与法条同语言空间，embedding 匹配精度高，是召回主力
+// 合同正文不进通道 A（合同语言会稀释法律意图），改由通道 B 独立召回
+const buildChannelAQueries = ({
     contractType = '',
     reviewPoints = [],
     corePurposes = [],
     question = '',
     perspective = '',
 } = {}) => {
-    const focusedTerms = [
-        contractType,
-        perspective ? `${perspective} 立场 风险 责任 权利义务` : '',
-        ...reviewPoints,
-        ...corePurposes,
-        question,
-    ].filter(Boolean).join('\n');
+    const queries = [];
+    const perspectiveSuffix = perspective ? `${perspective} 立场` : '';
 
-    return [
-        focusedTerms,
-        compactText(text, focusedTerms ? 3500 : 6000),
-    ].filter(Boolean).join('\n');
-};
+    if (contractType || perspectiveSuffix) {
+        queries.push([
+            contractType,
+            perspectiveSuffix || '法律 风险 责任 权利义务',
+        ].filter(Boolean).join(' '));
+    }
 
-const getRelevantKnowledge = async (options, limit = 8) => {
-    const query = typeof options === 'string'
-        ? buildKnowledgeSearchQuery({ text: options })
-        : buildKnowledgeSearchQuery(options);
-    const matches = await searchVectorDocuments(query, {
-        limit,
-        sourceTypes: ['law', 'case', 'rule', 'guide'],
-        rerank: true,
+    (reviewPoints || []).forEach((point) => {
+        queries.push([
+            contractType,
+            point,
+            perspectiveSuffix,
+        ].filter(Boolean).join(' '));
     });
 
-    return matches.map((item) => ({
-        source_type: item.source_type,
-        law: item.title,
-        clause: item.clause_id || item.source_id,
-        content: item.content,
-        score: item.rerank_score ?? item.score,
-        source_name: item.source_name,
-        source_url: item.source_url,
-        metadata: item.metadata || {},
-    }));
+    (corePurposes || []).forEach((purpose) => {
+        queries.push([
+            contractType,
+            purpose,
+        ].filter(Boolean).join(' '));
+    });
+
+    if (question) queries.push(String(question).trim());
+
+    return queries.filter(Boolean);
+};
+
+// 通道 B（合同内容）强阈值：只保留高置信命中，避免合同语言捞到弱相关法条噪声
+const CHANNEL_B_SCORE_THRESHOLD = 0.7;
+
+// 把向量检索结果映射为对外披露的 relevantKnowledge 项
+const toRelevantKnowledgeItem = (item) => ({
+    source_type: item.source_type,
+    law: item.title,
+    clause: item.clause_id || item.source_id,
+    content: item.content,
+    score: item.rerank_score ?? item.score,
+    source_name: item.source_name,
+    source_url: item.source_url,
+    metadata: item.metadata || {},
+});
+
+// 置信加权融合：通道 A（审查维度）与通道 B（合同内容）同时命中的法条置信最高，优先保留并加分
+// 仅 A 或仅 B 命中的项按分数排序在后；去重按 content_hash/source_id
+const mergeChannelsWithConfidence = (channelA, channelB, limit) => {
+    const getKey = (item) => item.content_hash || item.source_id || item.id;
+    const scoreOf = (item) => item.rerank_score ?? item.score ?? 0;
+    const merged = new Map();
+
+    for (const item of channelA) {
+        merged.set(getKey(item), { ...item, channel: 'A', confidence_boost: false });
+    }
+    for (const item of channelB) {
+        const key = getKey(item);
+        const existing = merged.get(key);
+        if (existing) {
+            // 两通道同时命中：置信最高，加分并标记
+            existing.confidence_boost = true;
+            const maxScore = Math.max(scoreOf(existing), scoreOf(item));
+            existing.rerank_score = maxScore + 0.05;
+            existing.score = maxScore;
+        } else {
+            merged.set(key, { ...item, channel: 'B', confidence_boost: false });
+        }
+    }
+
+    return [...merged.values()]
+        .sort((a, b) => {
+            if (a.confidence_boost !== b.confidence_boost) return a.confidence_boost ? -1 : 1;
+            return scoreOf(b) - scoreOf(a);
+        })
+        .slice(0, limit);
+};
+
+// 知识库检索：分通道召回 + 配额融合
+//   通道 A「审查维度」法律语言，主力，占 2/3 配额，每条 query 召回 3 条
+//   通道 B「合同内容」捞审查点未覆盖的非常规条款，补充，占 1/3 配额，每条 query 仅 top-1 且强阈值
+// CONTRACT_CHUNK_MAX > 0 时限制通道 B 的 chunk 数，控制长合同检索成本
+const getRelevantKnowledge = async (options, limit = 8) => {
+    const sourceTypes = ['law', 'case', 'rule', 'guide'];
+
+    // 字符串入口（纯文本）：单通道，按段落归并检索
+    if (typeof options === 'string') {
+        const queries = splitIntoParagraphGroups(options, { groupSize: 2, maxChars: 500, minChars: 5 });
+        const matches = await searchVectorDocumentsMulti(queries, {
+            limit,
+            sourceTypes,
+            rerank: true,
+        });
+        return matches.map(toRelevantKnowledgeItem);
+    }
+
+    const channelAQueries = buildChannelAQueries(options);
+    let channelBQueries = splitIntoParagraphGroups(options.text || '', { groupSize: 2, maxChars: 500, minChars: 5 });
+    if (CONTRACT_CHUNK_MAX > 0) channelBQueries = channelBQueries.slice(0, CONTRACT_CHUNK_MAX);
+
+    const quotaA = Math.max(1, Math.round((limit * 2) / 3));
+    const quotaB = Math.max(0, limit - quotaA);
+
+    const [channelA, channelB] = await Promise.all([
+        channelAQueries.length
+            ? searchVectorDocumentsMulti(channelAQueries, {
+                limit: quotaA,
+                sourceTypes,
+                rerank: true,
+                perQueryLimit: 3,
+            })
+            : Promise.resolve([]),
+        (channelBQueries.length && quotaB > 0)
+            ? searchVectorDocumentsMulti(channelBQueries, {
+                limit: quotaB,
+                sourceTypes,
+                rerank: true,
+                perQueryLimit: 1,
+                scoreThreshold: CHANNEL_B_SCORE_THRESHOLD,
+            })
+            : Promise.resolve([]),
+    ]);
+    
+    return mergeChannelsWithConfidence(channelA, channelB, limit).map(toRelevantKnowledgeItem);
 };
 
 const annotateKnowledgeUpdates = (items) => items.map((item) => ({
@@ -1333,13 +1427,14 @@ const runAnalysisInBackground = async (contractId, userId, userPerspective, preA
 
         // Step 2: 检索法条与案例依据
         await emitAnalysisProgress(null, contractId, { step: 'knowledge_search', status: 'running', message: '正在检索法条与案例依据...' });
+        // 分析整个合同，法律条文适当增加检索范围，如果后续需要，再增加检索数量 30 -> n
         const relevantKnowledge = await getRelevantKnowledge({
             text: plainText,
             contractType: preAnalysisData.contract_type,
             reviewPoints,
             corePurposes,
             perspective: userPerspective,
-        });
+        }, 40);
         await emitAnalysisProgress(null, contractId, { step: 'knowledge_search', status: 'completed', message: `法条与案例依据检索已完成（${relevantKnowledge.length} 条）。`, partialResult: { relevant_laws: annotateKnowledgeUpdates(relevantKnowledge) } });
 
         // Step 3: 核验合同主体信息
@@ -1384,6 +1479,7 @@ ${relevantKnowledge.map((item, index) => `[${index + 1}] [${item.source_type}] $
 硬性要求：
 - modification_suggestions 每一项必须包含 original_text 和 suggested_text。
 - original_text 必须尽量逐字摘录合同原文中的完整句子或段落，用于 OnlyOffice 定位、书签和批注锚点。
+- 必须逐条比对「法律与裁判依据」中每一条法律条文与合同对应条款，特别关注天数、期限、比例、金额、次数等强制性数字是否一致；合同条款与法律规定不一致的（例如法定 15 日被写成 30 日、试用期超过 6 个月、竞业限制超过 2 年），必须列入 dispute_points 并给出对应的 modification_suggestions，不得遗漏。
 - 如果没有检索依据，不得编造法条或案例，只能说明"当前知识库未检索到直接依据"。
 - 不输出自然语言解释，不输出 markdown。
 
@@ -1532,7 +1628,7 @@ router.post('/review-text', async (req, res) => {
             corePurposes: template.core_purposes || [],
             question,
             perspective,
-        }, 6);
+        }, 8);
         const prompt = `你是专业合同审查助手。用户选中了合同中的一段文本，请进行专项审查，只输出 JSON。
 
 审查模板：${template.name}
@@ -1546,6 +1642,11 @@ ${relevantKnowledge.map((item, index) => `[${index + 1}] [${item.source_type}] $
 ---
 ${wrapContractContent(text)}
 ---
+
+硬性要求：
+- 必须逐条比对「可引用依据」中每一条法律条文与待审查文本，特别关注天数、期限、比例、金额、次数等强制性数字是否一致；若存在不一致（例如法定 15 日被写成 30 日），必须在 risk_summary 中明确指出并在 suggested_text 中修正。
+- 如果没有检索依据，不得编造法条或案例，只能说明"当前知识库未检索到直接依据"。
+- 只输出 JSON，不输出自然语言解释，不输出 markdown。
 
 输出 JSON：
 {

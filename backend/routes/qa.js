@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const pdf = require('pdf-parse');
 const db = require('../database');
-const { searchVectorDocuments } = require('../services/vectorStore');
+const { searchVectorDocumentsMulti } = require('../services/vectorStore');
 const { searchWeb } = require('../services/webSearch');
 const { createChatCompletion } = require('../services/llmClient');
 
@@ -88,16 +88,22 @@ const shouldUseWebSearch = (question, knowledgeResults) => {
     return includesAny(question, PUBLIC_WEB_TERMS);
 };
 
-const buildQaKnowledgeQuery = (question, contextText, history = []) => {
-    const normalizedQuestion = String(buildHistoryAwareQuery(question, history)).replace(/\s+/g, ' ').trim();
-    const contractExcerpt = String(contextText || '')
+// 拆分为意图纯粹的子 query：
+//   1. 当前问题（最纯的检索意图）
+//   2. 历史感知问题（最近 3 条 user 提问 + 当前问题，用于指代消解和追问）
+// 合同正文不再进检索 query（合同语言 ≠ 法律语言，会稀释问题意图），
+// 合同上下文仍通过 buildEvidencePrompt 注入 LLM context。
+const buildQaKnowledgeQueries = (question, history = []) => {
+    const queries = [];
+    const cleanQuestion = String(question || '').replace(/\s+/g, ' ').trim();
+    if (cleanQuestion) queries.push(cleanQuestion);
+
+    const historyAware = String(buildHistoryAwareQuery(question, history))
         .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 2500);
-    return [
-        normalizedQuestion,
-        contractExcerpt ? `Contract context: ${contractExcerpt}` : '',
-    ].filter(Boolean).join('\n');
+        .trim();
+    if (historyAware && historyAware !== cleanQuestion) queries.push(historyAware);
+
+    return queries;
 };
 
 const buildSystemPrompt = () => [
@@ -108,6 +114,7 @@ const buildSystemPrompt = () => [
     'Use the current conversation history to resolve follow-up questions and pronouns.',
     'Do not invent statutes, article numbers, case names, court views, company registration data, or contract content.',
     'Legal provisions, case documents, and internal rules must come from the provided knowledge base results. If evidence is insufficient, say that the current knowledge base did not retrieve enough support.',
+    'When the user asks about contract compliance, risks, or legality, you must compare the selected contract content against each retrieved legal provision clause by clause, especially checking if mandatory numbers (deadlines, time limits, ratios, amounts, thresholds) are consistent. Proactively flag any discrepancy between the contract text and the legal requirements, and cite the specific provision.',
     'Public web search results are only clues. If a result is verified=false, do not use it as a confirmed conclusion.',
     'For company/entity checks, tell the user to verify final facts through official channels such as the National Enterprise Credit Information Publicity System, regulators, or court websites.',
     'For private personal data, credentials, security bypasses, or offensive requests, refuse that part and suggest a lawful verification channel. Please Respond in Chinese.',
@@ -150,10 +157,13 @@ const buildQaContext = async ({ question, contractId, history = [] }) => {
     }
 
     const normalizedHistory = normalizeHistory(history);
-    const knowledgeResults = await searchVectorDocuments(buildQaKnowledgeQuery(question, contextText, normalizedHistory), {
-        limit: 8,
-        sourceTypes: ['law', 'case', 'rule'],
-    });
+    const knowledgeResults = await searchVectorDocumentsMulti(
+        buildQaKnowledgeQueries(question, normalizedHistory),
+        {
+            limit: 8,
+            sourceTypes: ['law', 'case', 'rule'],
+        },
+    );
 
     const toolTrace = [{
         name: 'knowledge_base_search',

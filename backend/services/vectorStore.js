@@ -146,6 +146,85 @@ const splitTextIntoChunks = (text, { maxChars = 900, overlap = 120 } = {}) => {
     return chunks.filter((chunk) => chunk.length >= 20);
 };
 
+// 按段落拆分文本（不跨段落合并），每个段落作为独立 query 保留完整语义
+// 超长段落按句末标点二次拆分，同段落内的句子可组合到 maxChars 以内（语义连贯）
+// minChars 以下的碎片直接丢弃，避免无意义 query 稀释检索
+const splitIntoParagraphs = (text, { maxChars = 500, minChars = 5 } = {}) => {
+    // 不能用 normalizeText：它会把 \r\n 折成空格，导致段落边界丢失、整篇被合并成一段
+    // 只在段落内部折叠空格/制表符，保留 \r?\n 作为段落分隔
+    const raw = String(text || '');
+    if (!raw.trim()) return [];
+
+    const paragraphs = raw
+        .split(/(?:\r?\n)+/g)
+        .map((p) => p.replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean);
+
+    const result = [];
+    for (const para of paragraphs.length ? paragraphs : [raw.trim()]) {
+        if (para.length <= maxChars) {
+            result.push(para);
+            continue;
+        }
+        // 超长段落按句末标点拆分，同段落内句子组合到 maxChars 以内
+        const sentences = para.split(/(?<=[。！？；;.!?])\s*/g).map((s) => s.trim()).filter(Boolean);
+        let buf = '';
+        for (const sentence of sentences.length ? sentences : [para]) {
+            if (sentence.length > maxChars) {
+                if (buf) { result.push(buf); buf = ''; }
+                result.push(sentence); // 超长单句保持原样，交给 embedding 模型截断
+                continue;
+            }
+            if ((buf + sentence).length > maxChars) {
+                if (buf) result.push(buf);
+                buf = sentence;
+            } else {
+                buf = buf ? `${buf}${sentence}` : sentence;
+            }
+        }
+        if (buf) result.push(buf);
+    }
+    return result.filter((p) => p.length >= minChars);
+};
+
+// 通道 B「合同内容」专用切分：每个 \n 一段，相邻 groupSize 段合并为一个 chunk
+// 目的：把"每行一段"的细粒度按语义聚合成块，既保留合同自然结构，
+// 又避免每行一个 query 产生大量噪声检索；maxChars 防止单块过长被 embedding 截断
+const splitIntoParagraphGroups = (text, { groupSize = 5, maxChars = 500, minChars = 5 } = {}) => {
+    const raw = String(text || '');
+    if (!raw.trim()) return [];
+
+    const paragraphs = raw
+        .split(/(?:\r?\n)+/g)
+        .map((p) => p.replace(/[ \t]+/g, ' ').trim())
+        .filter(Boolean);
+    if (paragraphs.length === 0) return [];
+
+    const groups = [];
+    let buf = [];
+    let bufLen = 0;
+    const flush = () => {
+        if (buf.length === 0) return;
+        const chunk = buf.join(' ');
+        if (chunk.length >= minChars) groups.push(chunk);
+        buf = [];
+        bufLen = 0;
+    };
+
+    for (const para of paragraphs) {
+        // 达到 groupSize 或加入后超过 maxChars，先 flush（保证块不致过长）
+        if (buf.length >= groupSize || (bufLen + para.length + 1) > maxChars) {
+            flush();
+        }
+        buf.push(para);
+        bufLen += para.length + 1;
+        // 单段本身超 maxChars，单独成块（不再与相邻段合并）
+        if (para.length > maxChars) flush();
+    }
+    flush();
+    return groups;
+};
+
 const getMilvusClient = async () => {
     const vectorStore = String(process.env.VECTOR_STORE || '').toLowerCase();
     if (!MilvusClient || ['sqlite', 'postgres', 'relational'].includes(vectorStore)) return null;
@@ -898,14 +977,111 @@ const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], reran
     return reranked.slice(0, limit);
 };
 
+// 知识库检索 rerank 阈值：只对 rerank_score 生效；rerank 不可用时（无 rerank_score）不过滤
+// 设为 0 可关闭阈值过滤；未配置环境变量时默认 0.6
+const DEFAULT_SCORE_THRESHOLD = (() => {
+    const v = Number(process.env.KNOWLEDGE_SCORE_THRESHOLD);
+    return Number.isFinite(v) ? v : 0.6;
+})();
+
+// 多 query 拆分检索：对每个子 query 独立召回 + rerank，再按 content_hash 去重融合
+// 适用于"合同类型 + 审查点 + 合同正文段落"这类多意图场景，避免长文本稀释聚焦词信号
+const searchVectorDocumentsMulti = async (queries, {
+    limit = 8,
+    sourceTypes = [],
+    rerank = true,
+    scoreThreshold = DEFAULT_SCORE_THRESHOLD,
+    perQueryLimit = 2,
+} = {}) => {
+    const cleanQueries = (Array.isArray(queries) ? queries : [queries])
+        .map((q) => normalizeText(q))
+        .filter((q) => q && q.length >= 5);
+    if (cleanQueries.length === 0) return [];
+    const filterByThreshold = (items) => {
+        if (scoreThreshold <= 0) return items;
+        return items.filter((item) => {
+            if (item.rerank_score === undefined || item.rerank_score === null) return true;
+            return item.rerank_score >= scoreThreshold;
+        });
+    };
+
+    if (cleanQueries.length === 1) {
+        const results = await searchVectorDocuments(cleanQueries[0], { limit, sourceTypes, rerank });
+        return filterByThreshold(results).slice(0, limit);
+    }
+
+    // 多 query 时每条少取一些，靠融合补足；perQueryLimit 由调用方按通道配置
+    const perQueryResults = await Promise.all(
+        cleanQueries.map((q) => searchVectorDocuments(q, {
+            limit: perQueryLimit,
+            sourceTypes,
+            rerank,
+        })),
+    );
+    // 融合：按 content_hash/source_id 去重，保留最高 rerank_score（或 score 兜底）
+    // 1. 先过滤掉低于 KNOWLEDGE_SCORE_THRESHOLD 的项；每个 cleanQuery 贡献一条最高分的 above-threshold 项
+    //    （已被其他 query 选中的跳过，保证多样性；某 query 无 above-threshold 项则跳过）
+    // 2. 如果 Phase 1 超出 limit，按实际取 top limit return phase1;
+    // 3. 如果 Phase 1 不足 limit，从剩余项（含 below-threshold）去重后按分数补充
+
+    const getKey = (item) => item.content_hash || item.source_id || item.id;
+    const scoreOf = (item) => item.rerank_score ?? item.score ?? 0;
+    const sortByScoreDesc = (a, b) => scoreOf(b) - scoreOf(a);
+    const isAboveThreshold = (item) => {
+        if (scoreThreshold <= 0) return true;
+        if (item.rerank_score === undefined || item.rerank_score === null) return true;
+        return item.rerank_score >= scoreThreshold;
+    };
+
+    // Phase 1：每个 cleanQuery 贡献一条最高分的 above-threshold 项（已被选中的跳过）
+    const phase1 = [];
+    const usedKeys = new Set();
+    perQueryResults.forEach((results, queryIndex) => {
+        const best = results
+            .filter((item) => {
+                if (!isAboveThreshold(item)) return false;
+                const key = getKey(item);
+                return !key || !usedKeys.has(key);
+            })
+            .sort(sortByScoreDesc)[0];
+        if (!best) return; // 该 query 无 above-threshold 可用项，跳过
+        const key = getKey(best);
+        if (key) usedKeys.add(key);
+        phase1.push({ ...best, matched_query_index: queryIndex });
+    });
+    phase1.sort(sortByScoreDesc);
+
+    // 超出 limit 直接截断
+    if (phase1.length >= limit) {
+        return phase1.slice(0, limit);
+    }
+    // Phase 2：不足 limit，从剩余项（含 below-threshold）去重后按分数补充
+    const backfillByKey = new Map();
+    perQueryResults.forEach((results, queryIndex) => {
+        results.forEach((item) => {
+            const key = getKey(item);
+            if (key && usedKeys.has(key)) return;
+            const existing = backfillByKey.get(key);
+            if (!existing || scoreOf(item) > scoreOf(existing)) {
+                backfillByKey.set(key, { ...item, matched_query_index: queryIndex });
+            }
+        });
+    });
+    const backfill = [...backfillByKey.values()].sort(sortByScoreDesc);
+    return [...phase1, ...backfill.slice(0, limit - phase1.length)];
+};
+
 module.exports = {
     ensureVectorStore,
     seedLawsFromMarkdown,
     seedCasesFromJson,
     searchVectorDocuments,
+    searchVectorDocumentsMulti,
     listKnowledgeDocuments,
     importKnowledgeEntries,
     deleteKnowledgeDocuments,
     clearAllVectorDocuments,
     splitTextIntoChunks,
+    splitIntoParagraphs,
+    splitIntoParagraphGroups,
 };

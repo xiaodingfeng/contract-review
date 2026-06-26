@@ -304,7 +304,6 @@ const searchWeb = async (query, { count = 5 } = {}) => {
     ];
     const [bingResults, baiduResults, soResults] = await Promise.all(jobs);
     const merged = [...bingResults, ...baiduResults, ...soResults];
-    console.log('searchWeb merged, query:{}', query, merged);
     return verifySearchResults(query, merged).slice(0, count * 2);
 };
 
