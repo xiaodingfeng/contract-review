@@ -268,6 +268,10 @@ const ensureRelationalVectorTable = async () => {
             table.text('content').notNullable();
             table.text('metadata');
             table.text('embedding').notNullable();
+            // 法律时效性监控字段(P0):law_status=现行/已修订/已废止,superseded_by 指向新版本,effective_date 为施行日期
+            table.string('law_status').defaultTo('现行');
+            table.string('superseded_by');
+            table.date('effective_date');
             table.timestamps(true, true);
         });
         return;
@@ -283,6 +287,10 @@ const ensureRelationalVectorTable = async () => {
     await addColumn('source_url', (table) => table.string('source_url'));
     await addColumn('chunk_index', (table) => table.integer('chunk_index').defaultTo(0));
     await addColumn('content_hash', (table) => table.string('content_hash').index());
+    // 法律时效性监控字段(P0):向后兼容旧库,缺失时补加;law_status 默认 '现行' 保证旧数据可被检索
+    await addColumn('law_status', (table) => table.string('law_status').defaultTo('现行'));
+    await addColumn('superseded_by', (table) => table.string('superseded_by'));
+    await addColumn('effective_date', (table) => table.date('effective_date'));
 };
 
 const ensureMilvusCollection = async () => {
@@ -291,6 +299,9 @@ const ensureMilvusCollection = async () => {
         if (!client) return false;
         const exists = await client.hasCollection({ collection_name: COLLECTION_NAME });
         const hasCollection = exists?.value === true;
+        // 注意:Milvus collection 一旦创建,schema 不可变。若 collection 已存在则跳过创建,
+        // 新增字段(law_status/superseded_by/effective_date)需要手动重建 collection
+        // (drop + create + 重新 seed)或通过 MILVUS_COLLECTION 环境变量切换到新 collection 名。
         if (!hasCollection) {
             await client.createCollection({
                 collection_name: COLLECTION_NAME,
@@ -306,6 +317,10 @@ const ensureMilvusCollection = async () => {
                     { name: 'chunk_index', data_type: DataType.Int64 },
                     { name: 'content_hash', data_type: DataType.VarChar, max_length: 128 },
                     { name: 'content', data_type: DataType.VarChar, max_length: 4096 },
+                    // 法律时效性监控字段(P0):Milvus 无 DATE 类型,effective_date 用 VarChar 存 ISO 日期字符串
+                    { name: 'law_status', data_type: DataType.VarChar, max_length: 16 },
+                    { name: 'superseded_by', data_type: DataType.VarChar, max_length: 64 },
+                    { name: 'effective_date', data_type: DataType.VarChar, max_length: 32 },
                     { name: VECTOR_FIELD, data_type: DataType.FloatVector, dim: EMBEDDING_DIM },
                 ],
                 index_params: [
@@ -347,6 +362,19 @@ const toMetadataObject = (metadata) => {
     return metadata;
 };
 
+// 将中文日期(如 "2021年1月1日")规范化为 ISO 日期(YYYY-MM-DD),供 PG date 列与 Milvus VarChar 存储;无法解析时返回 null
+const normalizeEffectiveDate = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    const match = raw.match(/(\d{4})年(\d{1,2})月(\d{1,2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    // 已是 ISO 格式(YYYY-MM-DD 或 YYYY-M-D)直接返回;其余无法识别的格式返回 null 以避免 PG date 列报错
+    return /^\d{4}-\d{1,2}-\d{1,2}$/.test(raw) ? raw : null;
+};
+
 const toVectorDocumentRows = async (entry) => {
     const sourceType = entry.sourceType || entry.source_type || entry.type || 'law';
     const title = entry.title || entry.source_name || '未命名知识文档';
@@ -375,6 +403,10 @@ const toVectorDocumentRows = async (entry) => {
             content: chunk,
             metadata: JSON.stringify({ ...metadata, original_source_id: sourceId }),
             embedding: embeddings[index],
+            // 法律时效性监控字段(P0):effective_date 规范化为 ISO 日期;law_status 默认 '现行';superseded_by 默认空
+            effective_date: normalizeEffectiveDate(entry.effective_date || (entry.metadata && entry.metadata.effective_date)),
+            law_status: entry.law_status || '现行',
+            superseded_by: entry.superseded_by || '',
         };
     });
 };
@@ -420,6 +452,10 @@ const upsertMilvusRows = async (rows) => {
                 chunk_index: Number(row.chunk_index || 0),
                 content_hash: row.content_hash,
                 content: row.content.slice(0, 4096),
+                // 法律时效性监控字段(P0):与 PG 双写保持一致(VarChar 长度与 collection schema 对齐)
+                law_status: String(row.law_status || '现行').slice(0, 16),
+                superseded_by: String(row.superseded_by || '').slice(0, 64),
+                effective_date: String(row.effective_date || '').slice(0, 32),
                 [VECTOR_FIELD]: row.embedding,
             })),
         });
@@ -755,6 +791,7 @@ const listKnowledgeDocuments = async ({
     pageSize = 10,
     query = '',
     sourceType = '',
+    lawStatus = '',
 } = {}) => {
     await ensureVectorStore();
     const safePage = Math.max(1, Number(page) || 1);
@@ -764,6 +801,14 @@ const listKnowledgeDocuments = async ({
 
     const applyFilters = (builder) => {
         if (sourceType) builder.where('source_type', sourceType);
+        // 法律时效性过滤:现行 视作包含 NULL 旧数据(向后兼容);已修订/已废止 精确匹配
+        if (lawStatus === '现行') {
+            builder.andWhere(function () {
+                this.where('law_status', '现行').orWhereNull('law_status');
+            });
+        } else if (lawStatus === '已修订' || lawStatus === '已废止') {
+            builder.where('law_status', lawStatus);
+        }
         if (keyword) {
             builder.andWhere((nested) => {
                 nested
@@ -792,6 +837,7 @@ const listKnowledgeDocuments = async ({
             'content_hash',
             'content',
             'metadata',
+            'law_status',
             'updated_at',
         )
         .orderBy('updated_at', 'desc')
@@ -802,13 +848,24 @@ const listKnowledgeDocuments = async ({
         page: safePage,
         pageSize: safePageSize,
         total: Number(totalRow?.total || 0),
-        items: rows.map((row) => ({ ...row, metadata: toMetadataObject(row.metadata) })),
+        items: rows.map((row) => ({
+            ...row,
+            // law_status 为 NULL 的旧数据视作现行(向后兼容)
+            law_status: row.law_status || '现行',
+            metadata: toMetadataObject(row.metadata),
+        })),
     };
 };
 
-const sqliteVectorSearch = async (query, queryVector, { limit, sourceTypes }) => {
+const sqliteVectorSearch = async (query, queryVector, { limit, sourceTypes, includeHistorical }) => {
     let rowsQuery = db('vector_documents');
     if (sourceTypes.length > 0) rowsQuery = rowsQuery.whereIn('source_type', sourceTypes);
+    // 默认仅召回现行法律;law_status 为 NULL 的旧数据视作现行,确保向后兼容
+    if (!includeHistorical) {
+        rowsQuery = rowsQuery.andWhere(function () {
+            this.where('law_status', '现行').orWhereNull('law_status');
+        });
+    }
     const rows = await rowsQuery.select('*');
     return rows
         .map((row) => {
@@ -840,19 +897,47 @@ const sqliteVectorSearch = async (query, queryVector, { limit, sourceTypes }) =>
 
 const tokenizeQuery = (query) => {
     const text = normalizeText(query).toLowerCase();
-    const terms = text.match(/[\u4e00-\u9fa5]{2,}|[a-z0-9]{2,}/g) || [];
-    const stopwords = new Set(['合同', '条款', '风险', '审查', '问题', '建议', '相关', '依据', '法律', '法规']);
-    return [...new Set(terms)]
-        .filter((term) => !stopwords.has(term) && term.length <= 24)
-        .slice(0, 16);
+    const rawTerms = text.match(/[\u4e00-\u9fa5]{2,}|[a-z0-9]{2,}/g) || [];
+    const stopwords = new Set(['合同', '条款', '风险', '审查', '问题', '建议', '相关', '依据', '法律', '法规', '甲方', '乙方', '应当', '可以', '不得', '本合同', '进行', '以及', '或者']);
+
+    // 对长中文 token 做 2-3 字 ngram 二次切分,提升短关键词召回
+    // 否则"甲方应当在解除或终止本合同时"会被当成 14 字整体,LIKE 匹配不到任何 content
+    const expandedTerms = new Set();
+    for (const term of rawTerms) {
+        if (/[\u4e00-\u9fa5]/.test(term) && term.length > 4) {
+            // 长中文 token:提取 2 字 bigram 和 3 字 trigram
+            for (let i = 0; i < term.length - 1; i += 1) {
+                const bigram = term.slice(i, i + 2);
+                if (bigram.length === 2) expandedTerms.add(bigram);
+            }
+            for (let i = 0; i < term.length - 2; i += 1) {
+                const trigram = term.slice(i, i + 3);
+                if (trigram.length === 3) expandedTerms.add(trigram);
+            }
+            // 同时保留原长 token(用于精确长 content 匹配,如法律名称)
+            expandedTerms.add(term);
+        } else {
+            expandedTerms.add(term);
+        }
+    }
+
+    return [...expandedTerms]
+        .filter((term) => !stopwords.has(term) && term.length <= 24 && term.length >= 2)
+        .slice(0, 40);
 };
 
-const keywordSearch = async (query, { limit, sourceTypes }) => {
+const keywordSearch = async (query, { limit, sourceTypes, includeHistorical }) => {
     const terms = tokenizeQuery(query);
     if (terms.length === 0) return [];
 
     let rowsQuery = db('vector_documents');
     if (sourceTypes.length > 0) rowsQuery = rowsQuery.whereIn('source_type', sourceTypes);
+    // 默认仅召回现行法律;law_status 为 NULL 的旧数据视作现行,确保向后兼容
+    if (!includeHistorical) {
+        rowsQuery = rowsQuery.andWhere(function () {
+            this.where('law_status', '现行').orWhereNull('law_status');
+        });
+    }
     rowsQuery = rowsQuery.andWhere((nested) => {
         for (const term of terms) {
             nested
@@ -910,14 +995,21 @@ const mergeSearchResults = (primary, secondary, limit) => {
         .slice(0, limit);
 };
 
-const milvusVectorSearch = async (queryVector, { limit, sourceTypes }) => {
+const milvusVectorSearch = async (queryVector, { limit, sourceTypes, includeHistorical }) => {
     if (!milvusReady) return null;
     const client = await getMilvusClient();
     if (!client) return null;
     try {
-        const filter = sourceTypes.length
-            ? `source_type in [${sourceTypes.map((item) => `"${escapeExpr(item)}"`).join(',')}]`
-            : undefined;
+        // 默认仅召回现行法律;law_status 为空字符串的旧数据视作现行,确保向后兼容
+        // (若 collection 未含 law_status 字段,Milvus 会抛错并被下方 catch 捕获,回退到 PG 路径同样过滤)
+        const filterParts = [];
+        if (sourceTypes.length) {
+            filterParts.push(`source_type in [${sourceTypes.map((item) => `"${escapeExpr(item)}"`).join(',')}]`);
+        }
+        if (!includeHistorical) {
+            filterParts.push(`(law_status == "现行" || law_status == "")`);
+        }
+        const filter = filterParts.length ? filterParts.join(' && ') : undefined;
         const response = await client.search({
             collection_name: COLLECTION_NAME,
             data: [queryVector],
@@ -958,20 +1050,22 @@ const milvusVectorSearch = async (queryVector, { limit, sourceTypes }) => {
     }
 };
 
-const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], rerank = true } = {}) => {
+const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], rerank = true, includeHistorical = false } = {}) => {
     await ensureVectorStore();
     const cleanQuery = normalizeText(query);
     const queryVector = await embedText(cleanQuery);
-    const candidateLimit = Math.max(limit * 8, limit);
-    let results = await milvusVectorSearch(queryVector, { limit: candidateLimit, sourceTypes });
+    // 候选集最小 48 条:limit 较小时(如通道 B limit=2),limit*8=16 太小,
+    // 会把精确匹配的高相关文档挡在候选集外,rerank 无能为力
+    const candidateLimit = Math.max(limit * 8, 48);
+    let results = await milvusVectorSearch(queryVector, { limit: candidateLimit, sourceTypes, includeHistorical });
     // Milvus 返回空数组时也回退到关系库（避免 Milvus 无数据但 SQLite 有数据时搜不到）
     if (!results || results.length === 0) {
         if (results && results.length === 0 && milvusReady) {
             console.log('[Vector Search] Milvus returned 0 results, falling back to relational vectors.');
         }
-        results = await sqliteVectorSearch(cleanQuery, queryVector, { limit: candidateLimit, sourceTypes });
+        results = await sqliteVectorSearch(cleanQuery, queryVector, { limit: candidateLimit, sourceTypes, includeHistorical });
     }
-    const keywordResults = await keywordSearch(cleanQuery, { limit: candidateLimit, sourceTypes });
+    const keywordResults = await keywordSearch(cleanQuery, { limit: candidateLimit, sourceTypes, includeHistorical });
     results = mergeSearchResults(results, keywordResults, candidateLimit);
     const reranked = rerank ? await rerankDocuments(cleanQuery, results, limit) : results.slice(0, limit);
     return reranked.slice(0, limit);
@@ -992,6 +1086,7 @@ const searchVectorDocumentsMulti = async (queries, {
     rerank = true,
     scoreThreshold = DEFAULT_SCORE_THRESHOLD,
     perQueryLimit = 2,
+    includeHistorical = false,
 } = {}) => {
     const cleanQueries = (Array.isArray(queries) ? queries : [queries])
         .map((q) => normalizeText(q))
@@ -1006,8 +1101,24 @@ const searchVectorDocumentsMulti = async (queries, {
     };
 
     if (cleanQueries.length === 1) {
-        const results = await searchVectorDocuments(cleanQueries[0], { limit, sourceTypes, rerank });
-        return filterByThreshold(results).slice(0, limit);
+        const results = await searchVectorDocuments(cleanQueries[0], { limit, sourceTypes, rerank, includeHistorical });
+        if (scoreThreshold <= 0) return results.slice(0, limit);
+        // 软阈值:优先返回 above-threshold,不足 limit 时从 below-threshold 按分数补充
+        // 避免阈值过高导致配额用不满、LLM 缺乏依据(对齐多 query 分支 Phase 2 降级逻辑)
+        const above = [];
+        const below = [];
+        for (const item of results) {
+            if (item.rerank_score === undefined || item.rerank_score === null) {
+                above.push(item); // rerank 不可用时视作 above,不过滤
+            } else if (item.rerank_score >= scoreThreshold) {
+                above.push(item);
+            } else {
+                below.push(item);
+            }
+        }
+        if (above.length >= limit) return above.slice(0, limit);
+        below.sort((a, b) => (b.rerank_score ?? 0) - (a.rerank_score ?? 0));
+        return [...above, ...below.slice(0, Math.max(0, limit - above.length))];
     }
 
     // 多 query 时每条少取一些，靠融合补足；perQueryLimit 由调用方按通道配置
@@ -1016,6 +1127,7 @@ const searchVectorDocumentsMulti = async (queries, {
             limit: perQueryLimit,
             sourceTypes,
             rerank,
+            includeHistorical,
         })),
     );
     // 融合：按 content_hash/source_id 去重，保留最高 rerank_score（或 score 兜底）

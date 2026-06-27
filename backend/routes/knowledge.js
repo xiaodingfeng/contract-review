@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const mammoth = require('mammoth');
 const pdf = require('pdf-parse');
 const db = require('../database');
@@ -15,6 +16,7 @@ const {
     clearAllVectorDocuments,
 } = require('../services/vectorStore');
 const { parseLegalMarkdown, parseLegalMarkdownFile } = require('../services/legalMarkdownParser');
+const lawSync = require('../services/lawSync');
 
 const router = express.Router();
 const BATCH_IMPORT_FILE_LIMIT = Math.max(1, Number(process.env.KNOWLEDGE_BATCH_FILE_LIMIT || 200));
@@ -112,6 +114,7 @@ router.get('/list', async (req, res) => {
             pageSize: req.query.pageSize,
             query: req.query.q || req.query.query || '',
             sourceType: req.query.type || req.query.source_type || '',
+            lawStatus: req.query.law_status || '',
         });
         res.json(result);
     } catch (error) {
@@ -337,6 +340,80 @@ router.post('/rebuild', async (req, res) => {
         console.error('[ERROR] Knowledge rebuild failed:', error);
         await sendEvent({ phase: 'error', message: `向量数据库重建失败: ${error.message}` });
         res.end();
+    }
+});
+
+// 同步法律版本:支持传入文件路径(filePath)或直接传入 Markdown 内容(title + markdown)
+router.post('/laws/sync', async (req, res) => {
+    const { filePath, title, markdown } = req.body || {};
+    let tmpFilePath = null;
+    try {
+        let targetPath;
+        if (filePath) {
+            targetPath = filePath;
+        } else if (markdown) {
+            // 把 markdown 写入临时文件,同步完成后删除
+            const tmpName = `law-sync-${Date.now()}-${Math.random().toString(36).slice(2)}.md`;
+            tmpFilePath = path.join(os.tmpdir(), tmpName);
+            fs.writeFileSync(tmpFilePath, markdown, 'utf8');
+            targetPath = tmpFilePath;
+        } else {
+            return res.status(400).json({ success: false, error: '需提供 filePath 或 markdown 参数' });
+        }
+
+        const options = title ? { title } : {};
+        const data = await lawSync.syncLawFromMarkdown(targetPath, options);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('[ERROR] Law sync failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Law sync failed.' });
+    } finally {
+        // 临时文件用完即删
+        if (tmpFilePath) {
+            try {
+                fs.unlinkSync(tmpFilePath);
+            } catch (e) {
+                /* 忽略删除失败 */
+            }
+        }
+    }
+});
+
+// 查询某法律的版本时间线(必填 title)
+router.get('/laws/versions', async (req, res) => {
+    const title = String(req.query.title || '').trim();
+    if (!title) {
+        return res.status(400).json({ success: false, error: 'title 参数必填' });
+    }
+    try {
+        const data = await lawSync.getLawVersionComparison(title);
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('[ERROR] Law versions query failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Law versions query failed.' });
+    }
+});
+
+// 返回所有法律的当前版本列表(仅 status='现行',按 title 去重取 effective_date 最新的一条)
+router.get('/laws', async (req, res) => {
+    try {
+        const currentVersions = await db('law_versions')
+            .where('status', '现行')
+            .select('id', 'title', 'version_label', 'effective_date', 'status', 'synced_at')
+            .orderBy('title');
+        // 同一 title 理论上只应有一条现行记录,兼容处理:按 title 分组取 effective_date 最新
+        const latestByTitle = new Map();
+        for (const row of currentVersions) {
+            const existing = latestByTitle.get(row.title);
+            if (!existing || (row.effective_date || '') > (existing.effective_date || '')) {
+                latestByTitle.set(row.title, row);
+            }
+        }
+        const data = Array.from(latestByTitle.values()).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        res.json({ success: true, data });
+    } catch (error) {
+        console.error('[ERROR] Law list failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Law list failed.' });
     }
 });
 

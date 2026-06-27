@@ -9,6 +9,8 @@ const qaRoutes = require('./routes/qa');
 const userRoutes = require('./routes/users');
 const knowledgeRoutes = require('./routes/knowledge');
 const templateRoutes = require('./routes/templates');
+const standardRoutes = require('./routes/standards');
+const { seedTemplatesIfEmpty } = require('./services/reviewTemplates');
 const db = require('./database');
 const resetAndRebuildDatabase = require('./database-check');
 
@@ -77,6 +79,7 @@ app.use('/api/qa', qaRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/standards', standardRoutes);
 
 app.get('/', (req, res) => {
   res.send('ContractGE Backend is running!');
@@ -99,6 +102,8 @@ app.use((err, req, res, next) => {
 
 async function startServer() {
   await resetAndRebuildDatabase();
+  // 启动时为空表 seed 审查模板(从 JSON 导入,标记 is_system=true,生成 embedding)
+  await seedTemplatesIfEmpty();
   server.listen(port, () => {
     console.log(`Backend server listening at http://localhost:${port}`);
   });

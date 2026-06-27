@@ -300,6 +300,35 @@
 
             <!-- Tab Content -->
             <div class="p-3 overflow-y-auto flex-grow">
+                <!-- 硬性合规检查（规则引擎） -->
+                <div v-if="activeAiTab === 'summary'" class="mb-4">
+                    <div v-if="hardViolations.length > 0" class="p-4 bg-red-50 rounded-md border-2 border-red-400">
+                        <div class="flex items-center justify-between mb-3">
+                            <p class="font-bold text-red-800 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                硬性合规检查：检出 {{ hardViolations.length }} 项违规
+                            </p>
+                        </div>
+                        <div class="space-y-3">
+                            <div v-for="(item, index) in hardViolations" :key="'hv-' + index" class="p-3 bg-white rounded border border-red-200">
+                                <div class="flex justify-between items-start gap-2">
+                                    <p class="font-semibold text-text-dark">{{ item.description }}</p>
+                                    <span :class="item.severity === 'high' ? 'bg-red-100 text-red-700 border-red-300' : 'bg-amber-100 text-amber-700 border-amber-300'" class="px-2 py-0.5 text-xs font-bold rounded border whitespace-nowrap">{{ item.severity === 'high' ? '高' : '中' }}</span>
+                                </div>
+                                <p class="mt-1 text-xs text-text-light">依据：{{ item.legal_basis }}</p>
+                                <p class="mt-1 text-sm">合同值：<span class="font-bold text-red-700">{{ item.contract_value }}</span> ／ 限值：<span class="font-bold text-green-700">{{ item.limit_value }}</span></p>
+                                <p class="mt-1 text-sm text-text-main">修改建议：{{ item.fix_template }}</p>
+                                <div class="mt-2 flex justify-end">
+                                    <button @click="adoptHardViolation(item)" class="px-3 py-1 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark">一键采纳</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="p-3 bg-green-50 rounded-md border border-green-200 text-sm text-green-700 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        硬性合规检查通过
+                    </div>
+                </div>
                 <!-- 风险仪表盘 -->
                 <div v-if="activeAiTab === 'summary' && riskDashboard.total > 0" class="mb-4 p-4 bg-white rounded-md border border-border-color">
                     <div class="flex items-center justify-between flex-wrap gap-3">
@@ -347,7 +376,46 @@
                 </div>
                 <!-- Dispute Points -->
                 <div v-if="activeAiTab === 'summary'">
+                    <!-- 截断条款提示（长合同分层审查中因超长未完整审查的条款，建议人工复核） -->
+                    <div v-if="reviewData.truncated_clauses && reviewData.truncated_clauses.length > 0" class="mb-4 p-4 bg-yellow-50 border border-yellow-400 border-l-4 rounded-md">
+                        <p class="font-bold text-yellow-800 flex items-center mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                            部分条款因过长未完整审查，建议人工复核
+                        </p>
+                        <ul class="text-sm text-yellow-800 space-y-1">
+                            <li v-for="(tc, idx) in reviewData.truncated_clauses" :key="'tc-' + idx">
+                                <span class="font-medium">{{ tc.clause_id }}</span>
+                                <span v-if="tc.char_count" class="text-yellow-700 ml-1">（{{ tc.char_count }} 字）</span>
+                                <span class="text-yellow-700 ml-1">— {{ tc.reason }}</span>
+                            </li>
+                        </ul>
+                    </div>
                     <div v-if="reviewData.dispute_points && reviewData.dispute_points.length > 0">
+                        <!-- 3.1 增量审查:变更待审提示卡 -->
+                        <div v-if="contractModifiedNotice" class="mb-3 p-3 bg-red-50 border border-red-300 border-l-4 border-l-red-500 rounded-md flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2 text-sm text-red-800">
+                                <span class="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                                <span class="font-semibold">变更待审:</span>
+                                <span>检测到合同修订 {{ contractModifiedNotice.total_changes }} 处变更(修改 {{ contractModifiedNotice.modified }} / 新增 {{ contractModifiedNotice.added }} / 删除 {{ contractModifiedNotice.deleted }}),建议执行增量审查</span>
+                            </div>
+                            <button
+                                @click="runIncrementalReview"
+                                :disabled="incrementalReviewLoading"
+                                class="px-3 py-1 text-xs font-medium text-white bg-red-500 rounded hover:bg-red-600 disabled:opacity-50 whitespace-nowrap"
+                            >
+                                {{ incrementalReviewLoading ? '审查中...' : '执行增量审查' }}
+                            </button>
+                        </div>
+                        <!-- 3.1 增量审查:历史审查记录 -->
+                        <div v-if="incrementalReviews.length > 0" class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                            <p class="text-sm font-semibold text-blue-800 mb-2">增量审查记录({{ incrementalReviews.length }} 次)</p>
+                            <div v-for="(review, idx) in incrementalReviews" :key="'inc-' + idx" class="text-xs text-blue-700 mb-1 last:mb-0">
+                                <span class="font-medium">{{ formatIncrementalTime(review.reviewed_at) }}</span>
+                                <span class="ml-2">变更:修{{ review.diff_summary?.modified || 0 }} / 增{{ review.diff_summary?.added || 0 }} / 删{{ review.diff_summary?.deleted || 0 }}</span>
+                                <span v-if="review.new_risks?.length" class="ml-2 text-red-700">新增风险 {{ review.new_risks.length }} 项</span>
+                                <span v-if="review.resolved_risks?.length" class="ml-2 text-green-700">已解决 {{ review.resolved_risks.length }} 项</span>
+                            </div>
+                        </div>
                         <!-- 风险等级过滤 -->
                         <div class="mb-3 flex items-center gap-2 flex-wrap">
                             <span class="text-xs text-text-light">风险等级筛选：</span>
@@ -358,16 +426,30 @@
                             <span class="text-xs text-text-light ml-2">已按严重程度从高到低排序</span>
                         </div>
                         <div class="space-y-4">
-                            <div v-for="(item, index) in filteredAndSortedDisputePoints" :key="'dp-' + index" :class="['p-4 bg-bg-subtle rounded-md border border-border-color', normalizeSeverity(item.severity) === 'high' ? 'border-l-4 border-l-red-500' : normalizeSeverity(item.severity) === 'medium' ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-blue-500']">
+                            <div v-for="(item, index) in filteredAndSortedDisputePoints" :key="'dp-' + index" :class="['p-4 bg-bg-subtle rounded-md border border-border-color', item.resolved ? 'opacity-50 border-gray-300' : (normalizeSeverity(item.severity) === 'high' ? 'border-l-4 border-l-red-500' : normalizeSeverity(item.severity) === 'medium' ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-blue-500')]">
                                 <div class="flex justify-between items-start gap-2">
-                                    <p class="font-semibold text-text-dark">{{ disputeTitle(item, index) }}</p>
-                                    <span v-if="item.severity" :class="severityClass(item.severity)" class="px-2 py-0.5 text-xs font-bold rounded border whitespace-nowrap">{{ severityLabel(item.severity) }}</span>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <p class="font-semibold text-text-dark" :class="item.resolved ? 'line-through text-gray-500' : ''">{{ disputeTitle(item, index) }}</p>
+                                        <span v-if="item.clause_id" class="px-2 py-0.5 text-xs font-medium rounded border bg-blue-100 text-blue-700 border-blue-300 whitespace-nowrap">{{ item.clause_id }}</span>
+                                        <el-tag v-if="item.resolved" type="info" size="small" effect="plain">已解决</el-tag>
+                                        <el-tag v-if="item.isNewIncremental" type="danger" size="small">新增风险</el-tag>
+                                    </div>
+                                    <span v-if="item.severity && !item.resolved" :class="severityClass(item.severity)" class="px-2 py-0.5 text-xs font-bold rounded border whitespace-nowrap">{{ severityLabel(item.severity) }}</span>
                                 </div>
                                 <p v-if="!showPlainLanguage" class="mt-2 text-sm text-text-main whitespace-pre-line">{{ disputeDescription(item) }}</p>
                                 <div v-else class="mt-2 p-3 bg-blue-50 text-blue-800 rounded-md border-l-4 border-blue-400">
                                     <p class="text-xs font-bold mb-1">📢 大白话解释：</p>
                                     <p class="text-sm">{{ item.plain_language || disputeDescription(item) }}</p>
                                 </div>
+                                <!-- 3.3 证据链联动 -->
+                                <EvidenceCard
+                                    v-if="!item.resolved && item.evidence"
+                                    :evidence="item.evidence"
+                                    :title="`证据链`"
+                                    class="mt-3"
+                                    @locate-contract="handleLocateContract"
+                                    @view-law="handleViewLaw"
+                                />
                             </div>
                         </div>
                     </div>
@@ -397,19 +479,38 @@
                     </div>
                     <div v-else class="text-center text-text-light py-8">未发现明确的违约成本条款</div>
                 </div>
-                <!-- Seal Analysis -->
+                <!-- Seal Analysis (3.2 多模态印章分析) -->
                 <div v-if="activeAiTab === 'summary'">
                     <div v-if="reviewData.seal_analysis && reviewData.seal_analysis.length > 0" class="space-y-4">
-                        <div v-for="(item, index) in reviewData.seal_analysis" :key="'seal-' + index" class="p-4 bg-gray-50 rounded-md border border-gray-200">
+                        <div v-for="(item, index) in reviewData.seal_analysis" :key="'seal-' + index" :class="['p-4 rounded-md border', sealItemClass(item)]">
                             <div class="flex justify-between items-center mb-2">
-                                <p class="font-bold text-text-dark">{{ item.seal_name }}</p>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <p class="font-bold text-text-dark">{{ item.seal_name }}</p>
+                                    <el-tag v-if="item.source === 'vision'" type="primary" size="small" effect="plain">视觉模型</el-tag>
+                                    <el-tag v-else-if="item.source === 'ocr'" type="info" size="small" effect="plain">OCR</el-tag>
+                                </div>
                                 <el-tag :type="item.risk_level === '低' ? 'success' : item.risk_level === '中' ? 'warning' : 'danger'" size="small">
                                     风险：{{ item.risk_level }}
                                 </el-tag>
                             </div>
                             <div class="mt-2 text-sm flex items-center">
                                 <span class="text-gray-500 mr-2">状态:</span>
-                                <span :class="item.status === '正常' ? 'text-green-600' : 'text-orange-600'" class="font-medium">{{ item.status }}</span>
+                                <span :class="sealStatusClass(item)" class="font-medium">{{ item.status }}</span>
+                            </div>
+                            <!-- 视觉模型分析的字段 -->
+                            <div v-if="item.source === 'vision'" class="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                <div :class="['p-2 rounded border', item.ps_suspect ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700']">
+                                    <p class="font-semibold">PS 疑似</p>
+                                    <p>{{ item.ps_suspect ? '是' : '否' }}</p>
+                                </div>
+                                <div :class="['p-2 rounded border', item.position_compliant ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700']">
+                                    <p class="font-semibold">位置合规</p>
+                                    <p>{{ item.position_compliant ? '是' : '否' }}</p>
+                                </div>
+                                <div class="p-2 rounded border bg-blue-50 border-blue-200 text-blue-700">
+                                    <p class="font-semibold">印章类型</p>
+                                    <p>{{ item.seal_type || '未知' }}</p>
+                                </div>
                             </div>
                             <p class="mt-2 text-xs text-text-main leading-relaxed">
                                 <span class="text-gray-500">检测详情:</span><br/>
@@ -419,18 +520,42 @@
                     </div>
                     <div v-else class="text-center text-text-light py-8">未发现印章信息或正在分析中</div>
                 </div>
+                <!-- 4.3 行业标准对比 -->
+                <div v-if="activeAiTab === 'summary'">
+                    <div v-if="reviewData.standard_comparison && reviewData.standard_comparison.length > 0" class="space-y-3">
+                        <div v-for="(cmp, idx) in reviewData.standard_comparison" :key="'std-cmp-' + idx" class="p-4 bg-amber-50 rounded-md border border-amber-200 border-l-4 border-l-amber-500">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 text-xs font-semibold bg-amber-200 text-amber-900 rounded">{{ cmp.category_label || cmp.category }}</span>
+                                    <p class="font-semibold text-text-dark text-sm">合同 {{ cmp.contract_clause_id || '' }} vs {{ cmp.matched_standard?.title || '行业标准' }}</p>
+                                </div>
+                                <span class="text-xs text-amber-700">相似度 {{ (cmp.matched_standard?.score || 0).toFixed(2) }}</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 text-xs">
+                                <div>
+                                    <p class="text-gray-600 font-medium mb-1">合同条款:</p>
+                                    <p class="text-text-main bg-white p-2 rounded border border-amber-100 leading-relaxed">{{ cmp.contract_clause_text }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-gray-600 font-medium mb-1">标准条款{{ cmp.matched_standard?.industry ? '(' + cmp.matched_standard.industry + ')' : '' }}:</p>
+                                    <p class="text-text-main bg-white p-2 rounded border border-amber-100 leading-relaxed">{{ cmp.matched_standard?.clause_text }}</p>
+                                </div>
+                            </div>
+                            <p class="mt-2 text-xs text-amber-800">{{ cmp.diff_description }}</p>
+                        </div>
+                    </div>
+                </div>
                 <!-- Relevant Laws -->
                 <div v-if="activeAiTab === 'knowledge'">
                     <div v-if="reviewData.relevant_laws && reviewData.relevant_laws.length > 0" class="space-y-4">
-                        <div v-for="(item, index) in reviewData.relevant_laws" :key="'law-' + index" class="p-4 bg-blue-50 rounded-md border border-blue-100">
+                        <div v-for="(item, index) in reviewData.relevant_laws" :key="'law-' + index" :class="['p-4 rounded-md border', isLawOutdated(item) ? 'bg-red-50 border-red-200 border-l-4 border-l-red-500' : 'bg-blue-50 border-blue-100']">
                             <div class="flex justify-between gap-3">
                                 <p class="font-bold text-blue-900">【{{ item.law }}】{{ item.clause }}</p>
-                                <el-tag :type="item.hasUpdate ? 'warning' : 'success'" size="small">
-                                    {{ item.hasUpdate ? '需关注更新' : '当前可参考' }}
-                                </el-tag>
+                                <el-tag v-if="isLawOutdated(item)" type="danger" size="small">{{ item.law_status === '已废止' ? '已废止' : '已修订' }}</el-tag>
+                                <el-tag v-else type="success" size="small">现行</el-tag>
                             </div>
                             <p class="mt-2 text-sm text-blue-900 leading-6">{{ item.content }}</p>
-                            <p v-if="item.hasUpdate" class="mt-2 text-xs text-orange-700">{{ item.updateNotice }}</p>
+                            <p v-if="isLawOutdated(item)" class="mt-2 text-xs text-red-700">{{ item.updateNotice || '该条文已被修订，仅作历史参考' }}</p>
                         </div>
                     </div>
                     <div v-else class="text-center text-text-light py-8">未命中相关法条</div>
@@ -520,6 +645,21 @@
                             
                             <div class="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center">
                                 <span v-if="isPdfContract" class="mr-2 text-xs text-amber-600">PDF 文件不支持原文改写，请使用审查报告导出或 PDF 批注</span>
+                                <button
+                                    @click="toggleNegotiation(item)"
+                                    :disabled="item._negotiationLoading"
+                                    :class="[
+                                        'mr-2 px-3 py-1.5 text-xs font-medium border rounded transition-colors flex items-center disabled:opacity-50',
+                                        item._negotiation
+                                            ? 'text-green-700 bg-green-50 border-green-300 hover:bg-green-100'
+                                            : 'text-purple-700 bg-purple-50 border-purple-300 hover:bg-purple-100'
+                                    ]"
+                                    :title="item._negotiation ? '已推演过,点击查看或收起' : '点击进行谈判推演'"
+                                >
+                                    <svg v-if="item._negotiationLoading" class="animate-spin h-3.5 w-3.5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                                    <svg v-else-if="item._negotiation" class="h-3.5 w-3.5 mr-1 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                    {{ item._negotiationLoading ? '推演中...' : (item._showNegotiation ? '收起推演' : (item._negotiation ? '已推演·查看' : '谈判推演')) }}
+                                </button>
                                 <button @click="previewSuggestion(item)" class="mr-2 px-3 py-1.5 text-xs font-medium text-primary bg-white border border-primary rounded hover:bg-primary-light transition-colors">
                                     查看变更
                                 </button>
@@ -527,6 +667,42 @@
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                                     {{ item.adopted ? '已采纳' : '一键采纳建议' }}
                                 </button>
+                            </div>
+                            <!-- 4.1 谈判推演面板 -->
+                            <div v-if="item._showNegotiation && item._negotiation" class="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-md space-y-3">
+                                <div class="flex items-center gap-2 text-xs text-purple-800 font-semibold">
+                                    <span>对方立场:{{ item._negotiation.counterparty_perspective }}</span>
+                                </div>
+                                <!-- 对方反驳 -->
+                                <div>
+                                    <p class="text-xs font-bold text-red-700 mb-1">对方可能反驳:</p>
+                                    <div v-for="(obj, oi) in item._negotiation.likely_objections" :key="'obj-' + oi" class="text-xs mb-1 p-2 bg-white border border-red-100 rounded">
+                                        <p class="text-text-main">{{ obj.reason }}</p>
+                                        <p v-if="obj.legal_basis && obj.legal_basis !== '无明确依据'" class="mt-0.5 text-gray-600">依据:{{ obj.legal_basis }}</p>
+                                        <p v-if="obj.business_concern" class="mt-0.5 text-gray-600">顾虑:{{ obj.business_concern }}</p>
+                                    </div>
+                                </div>
+                                <!-- 折中方案 -->
+                                <div>
+                                    <p class="text-xs font-bold text-amber-700 mb-1">折中方案:</p>
+                                    <div v-for="(opt, oi) in item._negotiation.fallback_options" :key="'opt-' + oi" class="text-xs mb-2 p-2 bg-white border border-amber-100 rounded">
+                                        <p class="text-text-main font-medium">{{ opt.text }}</p>
+                                        <p class="mt-1 text-gray-600">让步:{{ opt.tradeoff }}</p>
+                                        <p class="mt-0.5 text-gray-600">风险变化:{{ opt.risk_change }}</p>
+                                        <button
+                                            @click="adoptFallbackOption(item, opt)"
+                                            class="mt-1 px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-100 border border-amber-300 rounded hover:bg-amber-200"
+                                        >采纳此折中方案</button>
+                                    </div>
+                                </div>
+                                <!-- 谈判话术 -->
+                                <div>
+                                    <p class="text-xs font-bold text-blue-700 mb-1">谈判话术:</p>
+                                    <p class="text-xs text-text-main leading-relaxed p-2 bg-white border border-blue-100 rounded whitespace-pre-line">{{ item._negotiation.negotiation_talktrack }}</p>
+                                </div>
+                            </div>
+                            <div v-else-if="item._showNegotiation && item._negotiationError" class="mt-3 p-3 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                                谈判推演失败:{{ item._negotiationError }}
                             </div>
                         </div>
                     </div>
@@ -543,19 +719,49 @@
                     <div v-else class="text-center text-text-light py-8">主体信息无风险</div>
                 </div>
                 <div v-if="activeAiTab === 'summary' && reviewData.company_review && reviewData.company_review.length > 0" class="mt-4 space-y-4">
-                    <div v-for="(item, index) in reviewData.company_review" :key="'company-' + index" class="p-4 bg-white rounded-md border border-border-color">
+                    <div v-for="(item, index) in sortedCompanyReview" :key="'company-' + index" :class="['p-4 bg-white rounded-md border border-border-color', companyCardBorderClass(companyRiskLevel(item))]">
                         <div class="flex items-start justify-between gap-3">
-                            <div>
+                            <div class="flex items-center gap-2 flex-wrap">
                                 <p class="font-semibold text-text-dark">{{ item.company_name || item.title || '主体审查' }}</p>
-                                <p class="mt-1 text-sm text-text-main">{{ item.status || item.evidence_summary }}</p>
+                                <span :class="companyRiskBadgeClass(companyRiskLevel(item))" class="px-2 py-0.5 text-xs font-bold rounded border whitespace-nowrap">{{ companyRiskLabel(companyRiskLevel(item)) }}</span>
                             </div>
-                            <el-tag size="small" :type="String(item.authenticity || '').includes('未') ? 'warning' : 'success'">外部检索</el-tag>
+                            <span v-if="dataSourceLabel(item.authenticity)" :class="dataSourceClass(item.authenticity)" class="text-xs px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0">{{ dataSourceLabel(item.authenticity) }}</span>
                         </div>
-                        <p v-if="item.evidence_summary" class="mt-2 text-sm text-text-main whitespace-pre-line">{{ item.evidence_summary }}</p>
-                        <p v-if="item.authenticity" class="mt-2 text-xs text-text-light">{{ item.authenticity }}</p>
+                        <div class="mt-2">
+                            <p v-if="item.status" class="text-xs text-text-light">核验状态：{{ item.status }}</p>
+                            <p v-if="item.evidence_summary" class="mt-1 text-sm text-text-main whitespace-pre-line">{{ item.evidence_summary }}</p>
+                        </div>
+                        <div class="mt-3">
+                            <button v-if="(item.risk_items || []).length" @click="toggleCompanyCard(index)" class="text-xs text-primary hover:underline">
+                                {{ expandedCompanyCards.includes(index) ? '收起' : '展开' }}风险事项明细 ({{ (item.risk_items || []).length }})
+                            </button>
+                            <p v-else class="text-xs text-text-light">无风险事项</p>
+                            <div v-show="expandedCompanyCards.includes(index) && (item.risk_items || []).length" class="mt-2 overflow-x-auto">
+                                <table class="w-full text-xs border-collapse">
+                                    <thead>
+                                        <tr class="bg-bg-subtle text-text-light">
+                                            <th class="p-2 text-left font-medium border border-border-color">类型</th>
+                                            <th class="p-2 text-left font-medium border border-border-color">详情</th>
+                                            <th class="p-2 text-left font-medium border border-border-color">日期</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(ri, riIndex) in (item.risk_items || [])" :key="'ri-' + index + '-' + riIndex">
+                                            <td class="p-2 text-text-main border border-border-color">{{ ri.type }}</td>
+                                            <td class="p-2 text-text-main border border-border-color">{{ ri.detail }}</td>
+                                            <td class="p-2 text-text-light whitespace-nowrap border border-border-color">{{ ri.date }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <p v-if="item.suggestion" class="mt-3 pt-3 border-t border-gray-100 text-sm text-text-main">
+                            <span class="font-medium text-text-dark">建议：</span>{{ item.suggestion }}
+                        </p>
                         <div v-if="item.sources && item.sources.length" class="mt-2 flex flex-col gap-1">
                             <a v-for="source in item.sources" :key="source" :href="source" target="_blank" rel="noreferrer" class="text-xs text-primary hover:underline truncate">{{ source }}</a>
                         </div>
+                        <p v-if="item.authenticity" class="mt-2 text-xs text-text-light">{{ item.authenticity }}</p>
                     </div>
                 </div>
                 <!-- Focused Review -->
@@ -755,6 +961,9 @@
                     <span>已用时：{{ formatDuration(analysisElapsed) }}</span>
                     <span v-if="analysisEta > 0">预计剩余：{{ formatDuration(analysisEta) }}</span>
                 </div>
+                <div v-if="clauseProgress.total > 0" class="text-xs text-blue-600 mt-1">
+                    已审查 {{ clauseProgress.reviewed }}/{{ clauseProgress.total }} 条款<span v-if="clauseProgress.current_clause_id">（当前：{{ clauseProgress.current_clause_id }}）</span>
+                </div>
             </div>
 
             <!-- 步骤列表 -->
@@ -875,6 +1084,22 @@
                 </button>
             </div>
         </div>
+        <!-- 3.3 查看法条弹窗 -->
+        <el-dialog v-model="viewLawDialogVisible" title="法条详情" width="600px" append-to-body>
+            <div v-if="currentLawRef" class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <p class="text-base font-bold text-text-dark">{{ currentLawRef.law_name }} {{ currentLawRef.clause_id }}</p>
+                    <el-tag :type="currentLawRef.law_status === '现行' ? 'success' : currentLawRef.law_status === '已修订' ? 'warning' : 'danger'" size="small">
+                        {{ currentLawRef.law_status || '现行' }}
+                    </el-tag>
+                </div>
+                <p v-if="currentLawRef.effective_date" class="text-xs text-text-light">施行日期:{{ currentLawRef.effective_date }}</p>
+                <p class="text-sm text-text-main leading-relaxed whitespace-pre-line bg-gray-50 p-3 rounded border border-gray-200">{{ currentLawRef.content }}</p>
+                <p v-if="currentLawRef.law_status && currentLawRef.law_status !== '现行'" class="text-xs text-red-700 bg-red-50 p-2 rounded">
+                    注意:该条文法律状态为「{{ currentLawRef.law_status }}」,引用时请谨慎,建议查询最新版本。
+                </p>
+            </div>
+        </el-dialog>
     </div>
   </div>
 </template>
@@ -882,19 +1107,21 @@
 <script>
 import { ref, reactive, watch, toRaw, onMounted, nextTick, onUnmounted, computed } from 'vue';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
-import { ElMessage, ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete, ElSwitch, ElTooltip } from 'element-plus';
+import { ElMessage, ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete, ElSwitch, ElTooltip, ElDialog, ElTag } from 'element-plus';
 import { marked } from 'marked';
 import { v4 as uuidv4 } from 'uuid';
 import api from '../api';
 import { getUserId } from '../user';
 import { DocumentEditor } from "@onlyoffice/document-editor-vue";
 import { io } from "socket.io-client";
+import EvidenceCard from '../components/EvidenceCard.vue';
 
 export default {
   name: 'ReviewView',
   components: {
     DocumentEditor,
-    ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete, ElSwitch, ElTooltip
+    EvidenceCard,
+    ElUpload, ElSelect, ElOption, ElCheckboxGroup, ElCheckbox, ElInput, ElAutocomplete, ElSwitch, ElTooltip, ElDialog, ElTag
   },
   setup() {
     const route = useRoute();
@@ -919,6 +1146,8 @@ export default {
     const selectedSuggestionPreview = ref(null);
     const adoptedHighlights = ref({});
     const analysisProgress = ref([]);
+    // 长合同分层审查：条款级进度（Task 2.5）
+    const clauseProgress = ref({ reviewed: 0, total: 0, current_clause_id: '' });
     const selectedSuggestionIndexes = ref([]);
     const batchApplying = ref(false);
     const diffItems = ref([]);
@@ -1061,8 +1290,239 @@ export default {
             },
         };
     });
+    // 硬性合规检查（规则引擎检出的违规清单）
+    const hardViolations = computed(() => {
+        return reviewData.hard_violations || reviewData.analysis_result?.hard_violations || [];
+    });
+    // 一键采纳硬性违规修改建议：将 fix_template 包装后推入 modification_suggestions
+    const adoptHardViolation = (violation) => {
+        if (!violation || !violation.fix_template) return;
+        reviewData.modification_suggestions.push({
+            title: violation.description,
+            original_text: violation.clause_excerpt || '',
+            suggested_text: violation.fix_template,
+            reason: violation.legal_basis || '',
+            plain_language: violation.fix_template,
+            anchor_hint: '',
+        });
+        ElMessage.success('已将硬性违规修改建议加入修改列表。');
+    };
+    // 主体风险画像(Task 2.5 / 2.6)
+    const companyRiskOrder = { red: 0, yellow: 1, green: 2 };
+    const companyRiskLevel = (item) => {
+        const lvl = item && item.risk_level;
+        if (lvl === 'red' || lvl === 'yellow' || lvl === 'green') return lvl;
+        return 'green'; // 旧结构兼容:无 risk_level 默认绿色
+    };
+    const companyRiskLabel = (level) => ({
+        red: '高风险', yellow: '中风险', green: '低风险',
+    })[level] || '低风险';
+    const companyRiskBadgeClass = (level) => ({
+        red: 'bg-red-100 text-red-700 border-red-300',
+        yellow: 'bg-amber-100 text-amber-700 border-amber-300',
+        green: 'bg-green-100 text-green-700 border-green-300',
+    })[level] || 'bg-green-100 text-green-700 border-green-300';
+    const companyCardBorderClass = (level) => ({
+        red: 'border-l-4 border-l-red-500',
+        yellow: 'border-l-4 border-l-amber-500',
+        green: '',
+    })[level] || '';
+    const sortedCompanyReview = computed(() => {
+        const list = reviewData.company_review || [];
+        return [...list].sort((a, b) => {
+            const oa = companyRiskOrder[companyRiskLevel(a)] ?? 2;
+            const ob = companyRiskOrder[companyRiskLevel(b)] ?? 2;
+            return oa - ob;
+        });
+    });
+    const expandedCompanyCards = ref([]);
+    const toggleCompanyCard = (index) => {
+        const i = expandedCompanyCards.value.indexOf(index);
+        if (i >= 0) expandedCompanyCards.value.splice(i, 1);
+        else expandedCompanyCards.value.push(index);
+    };
+    // data_source 标识(Task 2.6):从 authenticity 解析数据来源
+    const dataSourceLabel = (authenticity) => {
+        const text = String(authenticity || '');
+        if (/mock/i.test(text)) return '模拟数据';
+        if (/web_search_fallback|fallback/i.test(text)) return '网页搜索回退';
+        if (/tiyanji|qichacha|gsxt/i.test(text)) return '已核验';
+        if (text) return '外部检索';
+        return '';
+    };
+    const dataSourceClass = (authenticity) => {
+        const text = String(authenticity || '');
+        if (/mock/i.test(text)) return 'bg-gray-100 text-gray-500';
+        if (/web_search_fallback|fallback/i.test(text)) return 'bg-gray-100 text-gray-500';
+        if (/tiyanji|qichacha|gsxt/i.test(text)) return 'bg-blue-50 text-blue-600';
+        if (text) return 'bg-gray-100 text-gray-500';
+        return '';
+    };
+    // 法条时效性警告(Task 1.8)
+    const isLawOutdated = (item) => {
+        if (!item) return false;
+        if (item.hasUpdate === true) return true;
+        const status = item.law_status;
+        return !!status && status !== '现行';
+    };
+
+    // 3.1 增量审查:执行条款级增量审查
+    const runIncrementalReview = async () => {
+        if (!contract.id || incrementalReviewLoading.value) return;
+        incrementalReviewLoading.value = true;
+        try {
+            const payload = {};
+            if (selectedTemplateId.value) payload.templateId = selectedTemplateId.value;
+            const response = await api.reviewIncremental(contract.id, payload);
+            const result = response.data || {};
+            if (result.message && !result.diff_clauses?.length) {
+                ElMessage.info(result.message);
+                contractModifiedNotice.value = null;
+                return;
+            }
+            // 同步增量审查结果到 reviewData
+            const newRisks = Array.isArray(result.new_risks) ? result.new_risks : [];
+            const resolvedRisks = Array.isArray(result.resolved_risks) ? result.resolved_risks : [];
+            // 标记历史风险中已解决的
+            reviewData.dispute_points = reviewData.dispute_points.map((dp) => (
+                resolvedRisks.includes(dp.title) ? { ...dp, resolved: true } : dp
+            ));
+            // 追加新增风险
+            const enrichedNewRisks = newRisks.map((r) => ({ ...r, isNewIncremental: true }));
+            reviewData.dispute_points = [...enrichedNewRisks, ...reviewData.dispute_points];
+            // 追加审查记录
+            const reviewRecord = {
+                reviewed_at: result.reviewed_at,
+                diff_summary: {
+                    modified: result.diff_clauses?.filter((d) => d.change_type === 'modified').length || 0,
+                    added: result.diff_clauses?.filter((d) => d.change_type === 'added').length || 0,
+                    deleted: result.diff_clauses?.filter((d) => d.change_type === 'deleted').length || 0,
+                },
+                new_risks: newRisks,
+                resolved_risks: resolvedRisks,
+            };
+            if (!reviewData.incremental_reviews) reviewData.incremental_reviews = [];
+            reviewData.incremental_reviews.push(reviewRecord);
+            // 清除变更待审提示
+            contractModifiedNotice.value = null;
+            ElMessage.success(`增量审查完成:新增风险 ${newRisks.length} 项,已解决 ${resolvedRisks.length} 项`);
+        } catch (error) {
+            ElMessage.error(error.response?.data?.error || '增量审查失败,请稍后重试');
+        } finally {
+            incrementalReviewLoading.value = false;
+        }
+    };
+
+    // 增量审查时间格式化
+    const formatIncrementalTime = (iso) => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        } catch {
+            return iso;
+        }
+    };
+
+    // 3.3 证据链联动:定位到合同原文(OnlyOffice 搜索)
+    const handleLocateContract = (anchor) => {
+        if (!anchor?.text) return;
+        const editor = docEditorComponent.value?.editorInstance || docEditorComponent.value;
+        // 优先调 OnlyOffice 的搜索 API
+        try {
+            const inst = editor?.editorInstance ? editor.editorInstance() : (typeof editor === 'function' ? editor() : editor);
+            if (inst && typeof inst.searchAndReplace === 'function') {
+                inst.searchAndReplace({ searchText: anchor.text, replaceText: anchor.text, lookAt: 'all' });
+                ElMessage.success('已定位到合同原文');
+                return;
+            }
+            if (inst && typeof inst.search === 'function') {
+                inst.search(anchor.text);
+                ElMessage.success('已定位到合同原文');
+                return;
+            }
+        } catch (e) {
+            console.warn('OnlyOffice search failed:', e);
+        }
+        ElMessage.info('当前 OnlyOffice 版本未开放搜索接口,请手动在左侧编辑器中查找:「' + anchor.text.slice(0, 40) + '...」');
+    };
+
+    // 3.3 证据链联动:查看法条弹窗
+    const handleViewLaw = (ref) => {
+        currentLawRef.value = ref;
+        viewLawDialogVisible.value = true;
+    };
+
+    // 3.2 印章分析 UI 辅助:卡片整体样式
+    const sealItemClass = (item) => {
+        if (item?.source === 'vision') {
+            if (item.ps_suspect) return 'bg-red-50 border-red-300 border-l-4 border-l-red-500';
+            if (item.position_compliant) return 'bg-green-50 border-green-200 border-l-4 border-l-green-500';
+            return 'bg-amber-50 border-amber-200 border-l-4 border-l-amber-500';
+        }
+        return 'bg-gray-50 border-gray-200';
+    };
+
+    // 3.2 印章分析 UI 辅助:状态文字样式
+    const sealStatusClass = (item) => {
+        if (item?.source === 'vision') {
+            if (item.ps_suspect) return 'text-red-700';
+            if (item.position_compliant) return 'text-green-700';
+            return 'text-amber-700';
+        }
+        return item?.status === '正常' ? 'text-green-600' : 'text-orange-600';
+    };
+
+    // 4.1 谈判推演:展开/收起面板,首次展开时调用后端模拟
+    const toggleNegotiation = async (item) => {
+        // 已有结果:仅切换显示
+        if (item._negotiation || item._negotiationError) {
+            item._showNegotiation = !item._showNegotiation;
+            return;
+        }
+        // 首次推演
+        item._showNegotiation = true;
+        item._negotiationLoading = true;
+        try {
+            const response = await api.simulateNegotiation(contract.id, {
+                suggestionIds: item.id ? [item.id] : [],
+            });
+            const data = response.data || {};
+            const results = Array.isArray(data.results) ? data.results : [];
+            // 后端按 suggestion_id 关联,未指定 id 时返回单条
+            const matched = results.length > 0 ? results[0] : null;
+            if (matched?.simulation) {
+                item._negotiation = {
+                    counterparty_perspective: data.counterparty_perspective || matched.simulation.counterparty_perspective,
+                    ...matched.simulation,
+                };
+            } else if (matched?.error) {
+                item._negotiationError = matched.error;
+            } else {
+                item._negotiationError = '未返回推演结果';
+            }
+        } catch (error) {
+            item._negotiationError = error.response?.data?.error || error.message || '请求失败';
+        } finally {
+            item._negotiationLoading = false;
+        }
+    };
+
+    // 4.1 谈判推演:采纳折中方案,替换 suggested_text
+    const adoptFallbackOption = (item, opt) => {
+        if (!opt?.text) return;
+        // 记录原始 suggested_text 以便撤销(若未采纳过)
+        if (!item.adopted && !item.adopted_original) {
+            item.adopted_original = item.suggested_text || item.modification || '';
+        }
+        item.suggested_text = opt.text;
+        if ('modification' in item) item.modification = opt.text;
+        item.adopted = true;
+        item._negotiation._adoptedFallback = true;
+        ElMessage.success('已采纳折中方案,可在文档中应用');
+    };
     const reviewTemplates = ref([]);
-    const selectedTemplateId = ref('general');
+    const selectedTemplateId = ref('');
 
     const allSuggestedReviewPoints = ref([]);
     const allPotentialParties = ref([]);
@@ -1127,12 +1587,36 @@ export default {
             loadingMessage.value = data.message || loadingMessage.value;
         });
 
+        // 长合同分层审查：条款级进度推送（Task 2.5）
+        socket.value.on('clause_progress', (data) => {
+            if (!data) return;
+            clauseProgress.value = {
+                reviewed: Number(data.reviewed) || 0,
+                total: Number(data.total) || 0,
+                current_clause_id: data.current_clause_id || '',
+            };
+        });
+
         socket.value.on('analysis-failed', (data) => {
             analysisActive.value = false;
             loading.value = false;
             reAnalyzing.value = false;
             stopStatusPolling();
             ElMessage.error(data?.error || '分析失败，请稍后重试');
+        });
+
+        // 3.1 增量审查:监听合同保存后变更通知
+        socket.value.on('contract-modified', (data) => {
+            if (!data || Number(data.contract_id) !== Number(contractId)) return;
+            contractModifiedNotice.value = {
+                contract_id: data.contract_id,
+                modified: data.modified || 0,
+                added: data.added || 0,
+                deleted: data.deleted || 0,
+                total_changes: data.total_changes || 0,
+                saved_at: data.saved_at,
+            };
+            ElMessage.warning(`检测到合同修订(${data.total_changes || 0} 处变更),建议执行增量审查`);
         });
 
         socket.value.on('disconnect', () => {
@@ -1280,7 +1764,17 @@ export default {
       breach_cost_analysis: [],
       seal_analysis: [],
       relevant_laws: [],
+      incremental_reviews: [],
+      standard_comparison: [],
     });
+
+    // 3.1 增量审查状态
+    const contractModifiedNotice = ref(null);
+    const incrementalReviewLoading = ref(false);
+    const incrementalReviews = computed(() => reviewData.incremental_reviews || []);
+    // 3.3 证据链联动:法条查看弹窗
+    const viewLawDialogVisible = ref(false);
+    const currentLawRef = ref(null);
 
     const firstText = (...values) => values.find(value => typeof value === 'string' && value.trim()) || '';
 
@@ -1332,12 +1826,20 @@ export default {
     const loadReviewTemplates = async () => {
       try {
         const response = await api.getReviewTemplates();
-        reviewTemplates.value = response.data || [];
-        if (!selectedTemplateId.value && reviewTemplates.value.length) {
-          selectedTemplateId.value = reviewTemplates.value[0].id;
+        const list = response.data.items || response.data || [];
+        reviewTemplates.value = list;
+        // 若当前未选择模板,或所选模板不在列表中,自动选第一个
+        if (list.length) {
+          const exists = list.some((t) => t.id === selectedTemplateId.value);
+          if (!selectedTemplateId.value || !exists) {
+            selectedTemplateId.value = list[0].id;
+          }
+        } else {
+          ElMessage.warning('审查模板列表为空,请联系管理员初始化模板数据。');
         }
       } catch (error) {
         console.error('Failed to load review templates:', error);
+        ElMessage.error('审查模板加载失败,请检查后端服务是否正常。');
       }
     };
 
@@ -1370,7 +1872,7 @@ export default {
         try {
             const preAnalysisRes = await api.preAnalyzeContract({ contractId: contract.id });
             Object.assign(preAnalysisData, preAnalysisRes.data);
-            selectedTemplateId.value = preAnalysisData.template_id || selectedTemplateId.value || 'general';
+            selectedTemplateId.value = preAnalysisData.template_id || selectedTemplateId.value || '';
             allSuggestedReviewPoints.value = [...preAnalysisData.suggested_review_points];
             allPotentialParties.value = [...preAnalysisData.potential_parties];
             allSuggestedCorePurposes.value = [...preAnalysisData.suggested_core_purposes];
@@ -1559,6 +2061,7 @@ export default {
         analysisElapsed.value = 0;
         analysisProgress.value = [];
         analysisSteps.value = [];
+        clauseProgress.value = { reviewed: 0, total: 0, current_clause_id: '' };
         loadingMessage.value = 'AI 正在深度审查合同，请通过下方进度追踪实时查看状态...';
         try {
             const analysisPayload = {
@@ -1683,6 +2186,7 @@ export default {
       analysisElapsed.value = 0;
       analysisProgress.value = [];
       analysisSteps.value = [];
+      clauseProgress.value = { reviewed: 0, total: 0, current_clause_id: '' };
       loadingMessage.value = '正在重新审查合同，请通过进度追踪查看状态...';
       try {
         const analysisPayload = {
@@ -1731,7 +2235,7 @@ export default {
             setupSocket(contract.id);
             perspective.value = contractData.perspective;
             Object.assign(preAnalysisData, contractData.preAnalysisData || {});
-            selectedTemplateId.value = preAnalysisData.template_id || 'general';
+            selectedTemplateId.value = preAnalysisData.template_id || '';
             // The server now returns the complete list, so we can trust it.
             // Add defensive checks to prevent crashes if preAnalysisData or its keys are missing.
             allSuggestedReviewPoints.value = contractData.preAnalysisData?.suggested_review_points || [];
@@ -1825,7 +2329,7 @@ export default {
 
         perspective.value = savedState.perspective;
         Object.assign(preAnalysisData, savedState.preAnalysisData || {});
-        selectedTemplateId.value = savedState.selectedTemplateId || preAnalysisData.template_id || 'general';
+        selectedTemplateId.value = savedState.selectedTemplateId || preAnalysisData.template_id || '';
         Object.assign(reviewData, savedState.reviewData || {});
 
         // Restore lists from savedState
@@ -1905,7 +2409,14 @@ export default {
         breach_cost_analysis: [],
         seal_analysis: [],
         relevant_laws: [],
+        hard_violations: [],
+        incremental_reviews: [],
+        standard_comparison: [],
       });
+      contractModifiedNotice.value = null;
+      incrementalReviewLoading.value = false;
+      viewLawDialogVisible.value = false;
+      currentLawRef.value = null;
       isEditorReady.value = false;
       // Reset new states
       Object.assign(preAnalysisData, { contract_type: '', potential_parties: [], suggested_review_points: [], suggested_core_purposes: [], template_id: '', template_name: '' });
@@ -2617,6 +3128,24 @@ export default {
       suggestionOriginal,
       suggestionText,
       suggestionReason,
+      isLawOutdated,
+      // 3.1 增量审查
+      contractModifiedNotice,
+      incrementalReviewLoading,
+      incrementalReviews,
+      runIncrementalReview,
+      formatIncrementalTime,
+      // 3.2 印章分析 UI
+      sealItemClass,
+      sealStatusClass,
+      // 3.3 证据链联动
+      viewLawDialogVisible,
+      currentLawRef,
+      handleLocateContract,
+      handleViewLaw,
+      // 4.1 谈判推演
+      toggleNegotiation,
+      adoptFallbackOption,
       previewSuggestion,
       prepareFocusedReviewFromSelection,
       submitFocusedReview,
@@ -2626,11 +3155,14 @@ export default {
       adoptSuggestion,
       analysisProgress,
       visibleAnalysisProgress,
+      clauseProgress,
       isPdfContract,
       severityFilter,
       filteredAndSortedDisputePoints,
       disputeSeverityStats,
       riskDashboard,
+      hardViolations,
+      adoptHardViolation,
       normalizeSeverity,
       severityLabel,
       severityClass,

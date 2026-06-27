@@ -8,57 +8,58 @@
 
 ## ✨ Features
 
-* 📄 合同上传与 AI 预分析
+- 📄 合同上传与 AI 预分析
+  - 支持 DOCX / PDF 上传，自动检测扫描件并提示
+  - 自动识别合同类型、主体信息与审查范围
+  - 异步分析任务，Socket.IO 实时推送进度与 ETA
+- ⚖️ 合同风险审查
+  - 输出风险点、修改建议、相关法条与审查理由
+  - 风险仪表盘：整体风险等级 + 高/中/低分级筛选排序
+  - 违约成本分析与法律依据引用（citations）渲染
+  - 专项审查持久化，支持历史记录查看与恢复
+  - 支持关联裁判文书增强分析
+  - 谈判博弈模拟：对修改建议反向推演，输出对方反驳 / 折中方案 / 谈判话术，已推演建议按钮显绿色勾标记
+  - 行业标准对比：审查时自动检索标准条款库，对核心条款输出差异对比
+  - 导出审查报告（HTML / PDF / Word），含风险证据、法条时效、标准对比、增量审查记录
+- 📝 OnlyOffice 在线协同编辑
+  - 文档内精准定位条款
+  - 添加批注与修改建议
+  - 一键采纳建议并高亮变更内容
+  - 版本管理：任意两版本对比、缺失条款一键补全
+- 📚 法律知识库
+  - 支持法律法规、裁判文书、审查规则导入
+  - 支持向量检索、删除与模板下载
+  - 行业标准条款库：公共库 + 私有库，适用合同类型多选，审查时自动对比
+  - 法律时效性监控：标注现行 / 已修订 / 已废止，附替代版本提示
+- 🏢 企业核验
+  - 企查查 OpenAPI v2（AppKey + SecretKey + MD5 签名）
+  - 天眼查 Bearer 鉴权
+  - 无 Token 时自动回退到网页搜索，提取法定代表人 / 统一社会信用代码 / 风险关键词
+- 📋 审查模板管理
+  - 在线 CRUD，支持合同类型关键词、审查点、核心目的、报告章节配置
+  - 版本快照与回滚，系统模板不可删除
+- 🤖 智能问答
+  - SSE 流式输出
+  - 携带上下文会话历史，按合同隔离问答记录
+  - 支持知识库检索 + 受控联网搜索（含广告过滤与重试）
+- 📋 审查记录管理
+  - 历史记录搜索与多维度筛选（状态、合同类型）
+  - 展示合同类型、审查立场与风险点统计
+- 🧠 向量检索与 AI 能力
+  - Embedding / Rerank
+  - Milvus 向量数据库
+  - OpenAI Compatible API
+  - 检索优化：候选集最小 48 条 + 单 query 降级补充 + ngram 二次切分提升短关键词召回
+  - 分通道检索：通道 A（审查维度）+ 通道 B（合同内容），配额融合 + 软阈值
+  - 谈判博弈模拟：LLM 单次反向论证，推断对方立场与折中方案
+  - 视觉模型印章分析：PS 疑似 / 位置合规 / 印章类型识别
+- 🐳 Docker 一键部署
+  - PostgreSQL
+  - Milvus
+  - MinIO
+  - OnlyOffice
 
-  * 支持 DOCX / PDF 上传，自动检测扫描件并提示
-  * 自动识别合同类型、主体信息与审查范围
-  * 异步分析任务，Socket.IO 实时推送进度与 ETA
-
-* ⚖️ 合同风险审查
-
-  * 输出风险点、修改建议、相关法条与审查理由
-  * 风险仪表盘：整体风险等级 + 高/中/低分级筛选排序
-  * 违约成本分析与法律依据引用（citations）渲染
-  * 专项审查持久化，支持历史记录查看与恢复
-  * 支持关联裁判文书增强分析
-
-* 📝 OnlyOffice 在线协同编辑
-
-  * 文档内精准定位条款
-  * 添加批注与修改建议
-  * 一键采纳建议并高亮变更内容
-  * 版本管理：任意两版本对比、缺失条款一键补全
-
-* 📚 法律知识库
-
-  * 支持法律法规、裁判文书、审查规则导入
-  * 支持向量检索、删除与模板下载
-
-* 🤖 智能问答
-
-  * SSE 流式输出
-  * 携带上下文会话历史，按合同隔离问答记录
-  * 支持知识库检索 + 受控联网搜索（含广告过滤与重试）
-
-* 📋 审查记录管理
-
-  * 历史记录搜索与多维度筛选（状态、合同类型）
-  * 展示合同类型、审查立场与风险点统计
-
-* 🧠 向量检索与 AI 能力
-
-  * Embedding / Rerank
-  * Milvus 向量数据库
-  * OpenAI Compatible API
-
-* 🐳 Docker 一键部署
-
-  * PostgreSQL
-  * Milvus
-  * MinIO
-  * OnlyOffice
-
----
+***
 
 ## 🖼️ Demo
 
@@ -70,8 +71,8 @@
 | -------------- | -------------- |
 | ![](img/3.jpg) | ![](img/5.jpg) |
 
-| 知识库            | 智能问答           |
-| -------------- | -------------- |
+| 知识库             | 智能问答           |
+| --------------- | -------------- |
 | ![](img/10.jpg) | ![](img/9.jpg) |
 
 更多演示图：
@@ -86,45 +87,48 @@
 
 ![](img/11.jpg)
 
----
+***
 
 ## 🏗️ Tech Stack
 
 ### Frontend
 
-* Vue 3
-* Vite
-* Element Plus
-* Tailwind CSS
-* OnlyOffice Document Editor
+- Vue 3
+- Vite
+- Element Plus
+- Tailwind CSS
+- OnlyOffice Document Editor
 
 ### Backend
 
-* Node.js
-* Express
-* Knex
-* PostgreSQL
-* Socket.IO
+- Node.js
+- Express
+- Knex
+- PostgreSQL
+- Socket.IO
 
 ### AI / RAG
 
-* OpenAI Compatible Chat API
-* Embedding
-* Rerank
-* Milvus
-* 法律 Markdown 解析
-* 裁判文书 JSON 解析
+- OpenAI Compatible Chat API
+- Embedding
+- Rerank
+- Milvus
+- 法律 Markdown 解析
+- 裁判文书 JSON 解析
+- 谈判博弈模拟（LLM 反向论证）
+- 视觉模型印章分析
+- 企查查 / 天眼查企业核验
 
 ### Infrastructure
 
-* Docker Compose
-* PostgreSQL
-* Milvus
-* MinIO
-* etcd
-* OnlyOffice
+- Docker Compose
+- PostgreSQL
+- Milvus
+- MinIO
+- etcd
+- OnlyOffice
 
----
+***
 
 ## 📁 Project Structure
 
@@ -132,8 +136,8 @@
 .
 ├── backend/
 │   ├── data/              # 法律法规、裁判文书、模板
-│   ├── routes/            # API 路由
-│   ├── services/          # AI / 向量库 / 检索服务
+│   ├── routes/            # API 路由（contracts / knowledge / standards / ...）
+│   ├── services/          # AI / 向量库 / 检索 / 谈判模拟 / 企业核验
 │   └── uploads/           # 上传目录（已忽略）
 │
 ├── frontend/
@@ -149,7 +153,7 @@
 └── README.md
 ```
 
----
+***
 
 ## 🚀 Quick Start
 
@@ -161,7 +165,7 @@ git clone https://github.com/xiaodingfeng/contract-review
 cd contract-review
 ```
 
----
+***
 
 ### 2. Install Dependencies
 
@@ -175,7 +179,7 @@ cd ../frontend
 npm install
 ```
 
----
+***
 
 ### 3. Configure Environment Variables
 
@@ -197,11 +201,11 @@ ONLYOFFICE_JWT_SECRET=
 
 同时需要配置：
 
-* PostgreSQL
-* Milvus
-* OnlyOffice
+- PostgreSQL
+- Milvus
+- OnlyOffice
 
----
+***
 
 ### 4. Start Infrastructure Services
 
@@ -209,7 +213,7 @@ ONLYOFFICE_JWT_SECRET=
 docker compose up -d
 ```
 
----
+***
 
 ### 5. Start Backend
 
@@ -221,9 +225,9 @@ npm run dev
 
 首次启动会：
 
-* 初始化数据库
+- 初始化数据库
 
----
+***
 
 ### 6. Start Frontend
 
@@ -239,25 +243,29 @@ npm run dev
 http://localhost:8080
 ```
 
----
+***
 
 ## ⚙️ Environment Variables
 
 ### Backend
 
-| Variable                | Description           |
-| ----------------------- | --------------------- |
-| `LLM_BASE_URL`          | LLM API 地址            |
-| `LLM_API_KEY`           | LLM API Key           |
-| `LLM_MODEL`             | 聊天模型                  |
-| `EMBEDDING_BASE_URL`    | Embedding API         |
-| `EMBEDDING_MODEL`       | 向量模型                  |
-| `RERANK_MODEL`          | 重排模型                  |
-| `DATABASE_URL`          | PostgreSQL 连接         |
-| `VECTOR_STORE`          | 向量数据库类型               |
-| `MILVUS_*`              | Milvus 配置             |
-| `ONLYOFFICE_URL`        | OnlyOffice 地址         |
-| `ONLYOFFICE_JWT_SECRET` | OnlyOffice JWT Secret |
+| Variable                    | Description           |
+| --------------------------- | --------------------- |
+| `LLM_BASE_URL`              | LLM API 地址            |
+| `LLM_API_KEY`               | LLM API Key           |
+| `LLM_MODEL`                 | 聊天模型                  |
+| `EMBEDDING_BASE_URL`        | Embedding API         |
+| `EMBEDDING_MODEL`           | 向量模型                  |
+| `RERANK_MODEL`              | 重排模型                  |
+| `DATABASE_URL`              | PostgreSQL 连接         |
+| `VECTOR_STORE`              | 向量数据库类型               |
+| `MILVUS_*`                  | Milvus 配置             |
+| `ONLYOFFICE_URL`            | OnlyOffice 地址         |
+| `ONLYOFFICE_JWT_SECRET`     | OnlyOffice JWT Secret |
+| `VISION_MODEL_NAME`         | 视觉模型（印章分析，可选）         |
+| `COMPANY_API_TOKEN`         | 企业核验 AppKey（企查查）      |
+| `COMPANY_API_SECRET`        | 企业核验 SecretKey（企查查）   |
+| `KNOWLEDGE_SCORE_THRESHOLD` | 知识库 rerank 阈值（默认 0.6） |
 
 ### Frontend
 
@@ -266,7 +274,7 @@ http://localhost:8080
 | `VITE_APP_BACKEND_API_URL` | 后端 API 地址     |
 | `VITE_APP_ONLYOFFICE_URL`  | OnlyOffice 地址 |
 
----
+***
 
 ## 📚 Knowledge Base Initialization
 
@@ -297,7 +305,7 @@ KNOWLEDGE_SEED_TYPES=case
 LAW_SEED_DIRS=经济法,行政法
 ```
 
----
+***
 
 ## 🧩 Built-in Dataset
 
@@ -315,7 +323,7 @@ git clone https://github.com/xiaodingfeng/contract-review-laws.git
 offer-demo.docx
 ```
 
----
+***
 
 ## 🛠️ Build
 
@@ -327,52 +335,47 @@ npm run build
 
 当前构建配置：
 
-* Vite ESM
-* 路由懒加载
-* Rollup Manual Chunks
-* 第三方依赖拆包优化
+- Vite ESM
+- 路由懒加载
+- Rollup Manual Chunks
+- 第三方依赖拆包优化
 
----
+***
 
 ## 🔐 Security Notes
 
-* 不要提交：
+- 不要提交：
+  - `.env`
+  - API Key
+  - 数据库密码
+  - 上传文件
+  - Docker 数据目录
+- 联网搜索：
+  - 仅用于公开信息检索
+  - 涉及敏感内容时自动拒绝
+- 数据库存储：
+  - 仅保存路径与元数据
+  - 不保存文件二进制内容
 
-  * `.env`
-  * API Key
-  * 数据库密码
-  * 上传文件
-  * Docker 数据目录
-
-* 联网搜索：
-
-  * 仅用于公开信息检索
-  * 涉及敏感内容时自动拒绝
-
-* 数据库存储：
-
-  * 仅保存路径与元数据
-  * 不保存文件二进制内容
-
----
+***
 
 ## 📄 License
 
 MIT
 
----
+***
 
 ## ⭐ Acknowledgements
 
-* OnlyOffice
-* Milvus
-* OpenAI
-* Vue.js
-* PostgreSQL
-* Element Plus
+- OnlyOffice
+- Milvus
+- OpenAI
+- Vue.js
+- PostgreSQL
+- Element Plus
 
----
+***
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review\&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review\&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review\&Date)

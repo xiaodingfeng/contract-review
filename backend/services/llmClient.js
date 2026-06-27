@@ -53,6 +53,34 @@ const createChatCompletion = async (options, requestOptions = {}) => {
     throw lastError;
 };
 
+const createVisionCompletion = async (options, requestOptions = {}) => {
+    const maxRetries = Number(process.env.LLM_MAX_RETRIES || 2);
+    const baseDelay = Number(process.env.LLM_RETRY_BASE_MS || 800);
+    const timeout = Number(process.env.LLM_TIMEOUT_MS || 90000);
+    let lastError;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+        try {
+            return await getLlmClient().chat.completions.create({
+                model: process.env.VISION_MODEL_NAME || 'Qwen/Qwen2.5-VL-7B-Instruct',
+                ...options,
+            }, {
+                timeout,
+                ...requestOptions,
+            });
+        } catch (error) {
+            lastError = error;
+            if (attempt >= maxRetries || !isRetryableError(error)) break;
+            const delay = baseDelay * (2 ** attempt) + Math.floor(Math.random() * 250);
+            console.warn(`[LLM] Vision completion failed; retrying in ${delay}ms (${attempt + 1}/${maxRetries}).`, error.message);
+            await sleep(delay);
+        }
+    }
+
+    throw lastError;
+};
+
 module.exports = {
     createChatCompletion,
+    createVisionCompletion,
 };
