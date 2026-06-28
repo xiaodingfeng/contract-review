@@ -19,7 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const { lawsMarkdownDir, caseJsonDir, CASE_SEED_LIMIT, DEFAULT_LAW_SEED_DIRS } = require('./config');
+const { lawsMarkdownDir, caseJsonDir, CASE_SEED_LIMIT } = require('./config');
 const { plainMarkdownContent } = require('./textChunking');
 
 // 文件发现与 seed 源适配器：扫描法律 Markdown / 案例 JSON 目录
@@ -30,7 +30,8 @@ const listConfiguredLawDirs = () => {
         .split(',')
         .map((item) => item.trim())
         .filter(Boolean);
-    const dirs = configured.length ? configured : DEFAULT_LAW_SEED_DIRS;
+    // LAW_SEED_DIRS 为空时,遍历整个 lawsMarkdownDir 根目录(递归所有子目录下的 .md 文件)
+    const dirs = configured.length ? configured : [lawsMarkdownDir];
     return dirs.map((item) => path.isAbsolute(item) ? item : path.join(lawsMarkdownDir, item));
 };
 
@@ -64,12 +65,15 @@ const listCaseJsonFiles = () => {
     const dir = process.env.CASE_SEED_DIR
         ? (path.isAbsolute(process.env.CASE_SEED_DIR) ? process.env.CASE_SEED_DIR : path.join(__dirname, '..', '..', process.env.CASE_SEED_DIR))
         : caseJsonDir;
-    if (!fs.existsSync(dir) || CASE_SEED_LIMIT <= 0) return [];
-    return fs.readdirSync(dir, { withFileTypes: true })
+    if (!fs.existsSync(dir)) return [];
+    const allFiles = fs.readdirSync(dir, { withFileTypes: true })
         .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
         .map((entry) => path.join(dir, entry.name))
-        .sort((a, b) => path.basename(a).localeCompare(path.basename(b), 'zh-Hans-CN'))
-        .slice(0, CASE_SEED_LIMIT);
+        .sort((a, b) => path.basename(a).localeCompare(path.basename(b), 'zh-Hans-CN'));
+    // CASE_SEED_LIMIT 为 null(未设置)时不限制,获取目录下所有文件;为 0 表示不导入
+    if (CASE_SEED_LIMIT === null) return allFiles;
+    if (CASE_SEED_LIMIT <= 0) return [];
+    return allFiles.slice(0, CASE_SEED_LIMIT);
 };
 
 const fallbackLawEntryFromFile = (filePath) => {
