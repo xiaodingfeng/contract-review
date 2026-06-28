@@ -1,0 +1,90 @@
+[
+  {
+    "id": "labor_compete_max_2y",
+    "template_id": "labor",
+    "rule_type": "number_constraint",
+    "description": "竞业限制期限不得超过2年",
+    "legal_basis": "劳动合同法第24条",
+    "matcher": {
+      "clause_keywords": ["竞业限制", "竞业", "不得从事同类", "从事同类业务"],
+      "number_field": "期限",
+      "unit": "年"
+    },
+    "constraint": {
+      "op": "<=",
+      "value": 2
+    },
+    "severity": "high",
+    "fix_template": "建议将竞业限制期限修改为不超过2年（劳动合同法第24条）。超过2年的部分无效。"
+  },
+  {
+    "id": "labor_probation_max_6m",
+    "template_id": "labor",
+    "rule_type": "number_constraint",
+    "description": "试用期不得超过6个月",
+    "legal_basis": "劳动合同法第19条",
+    "matcher": {
+      "clause_keywords": ["试用期"],
+      "number_field": "试用期",
+      "unit": "月"
+    },
+    "constraint": {
+      "op": "<=",
+      "value": 6
+    },
+    "severity": "medium",
+    "fix_template": "建议将试用期修改为不超过6个月（劳动合同法第19条）。"
+  },
+  {
+    "id": "labor_breach_fee_limited",
+    "template_id": "labor",
+    "rule_type": "advisory",
+    "description": "违约金仅限服务期与竞业限制情形",
+    "legal_basis": "劳动合同法第22条、第23条、第25条",
+    "matcher": {
+      "clause_keywords": ["违约金"],
+      "number_field": "",
+      "unit": ""
+    },
+    "constraint": {},
+    "severity": "medium",
+    "fix_template": "用人单位仅可对服务期与竞业限制约定违约金，其他情形约定的违约金条款可能无效（劳动合同法第25条）。"
+  },
+  {
+    "id": "loan_rate_lpr_4x",
+    "template_id": "loan",
+    "rule_type": "number_constraint",
+    "description": "借款利率不得超过LPR的四倍",
+    "legal_basis": "最高人民法院关于审理民间借贷案件适用法律若干问题的规定",
+    "matcher": {
+      "clause_keywords": ["利率", "利息", "年利率", "月利率"],
+      "number_field": "利率",
+      "unit": "%"
+    },
+    "constraint": {
+      "op": "<=",
+      "value_expr": "lpr_4x",
+      "value_expr_deps": ["lpr_rate"]
+    },
+    "severity": "high",
+    "fix_template": "建议将借款利率调整为不超过合同成立时一年期LPR的四倍（当前约13.8%），超出部分不受法律保护。"
+  },
+  {
+    "id": "lease_term_max_20y",
+    "template_id": "lease",
+    "rule_type": "number_constraint",
+    "description": "租赁期限不得超过20年",
+    "legal_basis": "民法典第705条",
+    "matcher": {
+      "clause_keywords": ["租赁期限", "租期", "租赁期"],
+      "number_field": "期限",
+      "unit": "年"
+    },
+    "constraint": {
+      "op": "<=",
+      "value": 20
+    },
+    "severity": "high",
+    "fix_template": "建议将租赁期限修改为不超过20年，超过20年的部分无效（民法典第705条）。"
+  }
+]

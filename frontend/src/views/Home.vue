@@ -71,194 +71,57 @@
           <h3>未匹配到记录</h3>
           <p>请调整搜索关键词或筛选条件。</p>
         </div>
-        <div v-else class="table-wrap">
-          <table class="record-table">
-            <thead>
-              <tr>
-                <th>文件</th>
-                <th>合同类型</th>
-                <th>立场</th>
-                <th>风险</th>
-                <th>时间</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in pagedHistory" :key="`${item.record_type}-${item.id}`">
-                <td class="file-cell" :title="item.original_filename">
-                  <span v-if="item.record_type === 'group'" class="record-type">多合同</span>
-                  {{ item.original_filename }}
-                </td>
-                <td class="type-cell">{{ item.contract_type || '—' }}</td>
-                <td class="perspective-cell">{{ item.perspective || '—' }}</td>
-                <td class="risk-cell">
-                  <span v-if="item.risk_count > 0" class="risk-pill">{{ item.risk_count }}</span>
-                  <span v-else>—</span>
-                </td>
-                <td>{{ formatDate(item.created_at) }}</td>
-                <td><span :class="['status-pill', item.status]">{{ statusText(item.status) }}</span></td>
-                <td>
-                  <div class="row-actions">
-                    <button class="text-button" @click="viewReport(item)">查看</button>
-                    <el-popconfirm title="确认删除这份审查记录？" @confirm="deleteReport(item)">
-                      <template #reference>
-                        <button class="text-button danger">删除</button>
-                      </template>
-                    </el-popconfirm>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="pager">
-            <button :disabled="historyPage === 1" @click="historyPage -= 1">上一页</button>
-            <span>第 {{ historyPage }} / {{ totalHistoryPages }} 页</span>
-            <button :disabled="historyPage === totalHistoryPages" @click="historyPage += 1">下一页</button>
-          </div>
-        </div>
+        <HistoryTable
+          v-else
+          :items="pagedHistory"
+          :page="historyPage"
+          :total-pages="totalHistoryPages"
+          @view="viewReport"
+          @delete="deleteReport"
+          @update:page="historyPage = $event"
+        />
       </div>
     </section>
 
-    <div v-if="groupReportVisible" class="report-modal">
-      <div class="report-modal__panel">
-        <header class="report-modal__header">
-          <div>
-            <p class="eyebrow">多合同关联分析</p>
-            <h2>{{ groupReport?.name || '关联合同分析报告' }}</h2>
-          </div>
-          <button class="text-button" @click="closeGroupReport">关闭</button>
-        </header>
-        <div v-if="groupReportLoading" class="empty-block">正在加载分析报告...</div>
-        <div v-else-if="groupReport" class="group-report">
-          <section>
-            <h3>关联文件</h3>
-            <div class="group-report__files">
-              <span v-for="contract in groupReport.contracts" :key="contract.id">{{ contract.original_filename }}</span>
-            </div>
-          </section>
-          <section v-if="groupReport.result?.summary">
-            <h3>整体结论</h3>
-            <p>{{ groupReport.result.summary }}</p>
-          </section>
-          <section v-if="groupReport.result?.conflicts?.length">
-            <h3>条款冲突与矛盾</h3>
-            <article v-for="(item, index) in groupReport.result.conflicts" :key="'modal-conflict-' + index" class="group-report__item">
-              <h4>{{ item.title || `冲突点 ${index + 1}` }}</h4>
-              <p>{{ item.description }}</p>
-              <p v-if="item.contract_refs?.length">涉及文件：{{ item.contract_refs.join('、') }}</p>
-              <p v-if="item.suggestion">处理建议：{{ item.suggestion }}</p>
-            </article>
-          </section>
-          <section v-if="groupReport.result?.shared_risks?.length">
-            <h3>跨合同共同风险</h3>
-            <ul>
-              <li v-for="(risk, index) in groupReport.result.shared_risks" :key="'modal-risk-' + index">{{ risk }}</li>
-            </ul>
-          </section>
-        </div>
-      </div>
-    </div>
+    <GroupReportModal
+      :visible="groupReportVisible"
+      :loading="groupReportLoading"
+      :report="groupReport"
+      @close="closeGroupReport"
+    />
   </main>
 </template>
 
 <script>
-import { computed, onMounted, ref, watch } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElPopconfirm } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import api from '../api';
-import { getUserId } from '../user';
+import GroupReportModal from '../components/GroupReportModal.vue';
+import HistoryTable from '../components/HistoryTable.vue';
+import { useHomeHistory, formatDate, statusText } from '../composables/useHomeHistory';
 
 export default {
   name: 'HomeView',
-  components: { ElPopconfirm },
+  components: { GroupReportModal, HistoryTable },
   setup() {
-    const history = ref([]);
-    const loading = ref(true);
-    const error = ref(null);
-    const historyPage = ref(1);
-    const historyPageSize = 5;
+    const router = useRouter();
     const groupReportVisible = ref(false);
     const groupReportLoading = ref(false);
     const groupReport = ref(null);
-    const router = useRouter();
-    // 搜索与筛选
-    const searchKeyword = ref('');
-    const statusFilter = ref('');
-    const typeFilter = ref('');
 
-    const availableContractTypes = computed(() => {
-        const types = new Set();
-        history.value.forEach((item) => {
-            if (item.contract_type) types.add(item.contract_type);
-        });
-        return Array.from(types).sort();
-    });
-
-    const filteredHistory = computed(() => {
-        const kw = searchKeyword.value.trim().toLowerCase();
-        return history.value.filter((item) => {
-            if (kw && !String(item.original_filename || '').toLowerCase().includes(kw)) return false;
-            if (statusFilter.value && item.status !== statusFilter.value) return false;
-            if (typeFilter.value && item.contract_type !== typeFilter.value) return false;
-            return true;
-        });
-    });
-
-    const workflow = [
-      { step: '01', title: '上传合同', color: '#3b82f6', copy: '选择文件，进入在线预览。' },
-      { step: '02', title: '确认范围', color: '#ec4899', copy: '确认立场、重点和目标。' },
-      { step: '03', title: '查看结果', color: '#ef4444', copy: '集中查看风险和建议。' },
-      { step: '04', title: '采纳修改', color: '#111111', copy: '把修改同步到文档。' },
-    ];
-
-    const totalHistoryPages = computed(() => Math.max(1, Math.ceil(filteredHistory.value.length / historyPageSize)));
-    const pagedHistory = computed(() => {
-      const start = (historyPage.value - 1) * historyPageSize;
-      return filteredHistory.value.slice(start, start + historyPageSize);
-    });
-
-    const fetchHistory = async () => {
-      loading.value = true;
-      error.value = null;
-      try {
-        if (!getUserId()) {
-          error.value = '无法获取用户身份，请刷新页面重试。';
-          return;
-        }
-        const response = await api.getUserHistory(getUserId());
-        history.value = response.data;
-        historyPage.value = Math.min(historyPage.value, totalHistoryPages.value);
-      } catch (err) {
-        error.value = '加载审查记录失败，请稍后重试。';
-        console.error(err);
-      } finally {
-        loading.value = false;
-      }
-    };
-
-    const formatDate = (dateString) => {
-      if (!dateString) return 'N/A';
-      return new Date(dateString).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    };
-
-    const statusText = (status) => ({
-      Reviewed: '已完成',
-      Uploaded: '已上传',
-      PreAnalyzed: '待确认',
-    }[status] || status || '处理中');
+    const {
+      history, loading, error, historyPage,
+      searchKeyword, statusFilter, typeFilter,
+      availableContractTypes, filteredHistory, totalHistoryPages, pagedHistory,
+      fetchHistory, deleteReport,
+    } = useHomeHistory();
 
     const viewReport = async (item) => {
       if (item.record_type !== 'group') {
         router.push({ path: '/review', query: { contract_id: item.id } });
         return;
       }
-
       groupReportVisible.value = true;
       groupReportLoading.value = true;
       groupReport.value = null;
@@ -278,52 +141,27 @@ export default {
       groupReport.value = null;
     };
 
-    const deleteReport = async (item) => {
-      try {
-        if (item.record_type === 'group') {
-          await api.deleteContractGroup(item.id);
-        } else {
-          await api.deleteContract(item.id);
-        }
-        await fetchHistory();
-      } catch {
-        ElMessage.error('删除失败');
-      }
-    };
-
     const startNewReview = () => {
       localStorage.removeItem('review_session');
       router.push({ path: '/review' });
     };
 
-    onMounted(fetchHistory);
-
-    // 筛选条件变化时回到第一页
-    watch([searchKeyword, statusFilter, typeFilter], () => { historyPage.value = 1; });
+    const workflow = [
+      { step: '01', title: '上传合同', color: '#3b82f6', copy: '选择文件，进入在线预览。' },
+      { step: '02', title: '确认范围', color: '#ec4899', copy: '确认立场、重点和目标。' },
+      { step: '03', title: '查看结果', color: '#ef4444', copy: '集中查看风险和建议。' },
+      { step: '04', title: '采纳修改', color: '#111111', copy: '把修改同步到文档。' },
+    ];
 
     return {
       workflow,
-      history,
-      loading,
-      error,
-      historyPage,
-      groupReportVisible,
-      groupReportLoading,
-      groupReport,
-      totalHistoryPages,
-      pagedHistory,
-      fetchHistory,
-      formatDate,
-      statusText,
-      viewReport,
-      closeGroupReport,
-      deleteReport,
-      startNewReview,
-      searchKeyword,
-      statusFilter,
-      typeFilter,
-      availableContractTypes,
-      filteredHistory,
+      history, loading, error, historyPage,
+      groupReportVisible, groupReportLoading, groupReport,
+      totalHistoryPages, pagedHistory,
+      fetchHistory, formatDate, statusText,
+      viewReport, closeGroupReport, deleteReport, startNewReview,
+      searchKeyword, statusFilter, typeFilter,
+      availableContractTypes, filteredHistory,
     };
   },
 };
@@ -381,10 +219,7 @@ export default {
   letter-spacing: 0;
 }
 
-h1,
-h2,
-h3,
-p {
+h1, h2, h3, p {
   letter-spacing: 0;
 }
 
@@ -520,75 +355,6 @@ button:disabled {
   color: #ef4444;
 }
 
-.table-wrap {
-  min-height: 0;
-}
-
-.record-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  overflow: hidden;
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
-}
-
-.record-table th,
-.record-table td {
-  height: 42px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #eeeeee;
-  text-align: left;
-  vertical-align: middle;
-  font-size: 12px;
-}
-
-.record-table th {
-  color: #666666;
-  font-weight: 800;
-  background: #fafafa;
-}
-
-.file-cell {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 700;
-}
-
-.record-type {
-  display: inline-flex;
-  margin-right: 6px;
-  border-radius: 8px;
-  background: #e0f2fe;
-  color: #075985;
-  padding: 3px 6px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.status-pill {
-  display: inline-flex;
-  border-radius: 999px;
-  padding: 4px 8px;
-  background: #f5f5f5;
-  color: #333333;
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.status-pill.Reviewed {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-pill.Uploaded,
-.status-pill.PreAnalyzed {
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
 .history-filters {
   display: flex;
   gap: 8px;
@@ -618,140 +384,6 @@ button:disabled {
 
 .history-filter-select {
   cursor: pointer;
-}
-
-.type-cell,
-.perspective-cell {
-  color: #666;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.risk-cell {
-  text-align: center;
-}
-
-.risk-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #fee2e2;
-  color: #b91c1c;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.row-actions,
-.pager {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.text-button,
-.pager button {
-  background: #ffffff;
-  color: #111111;
-  padding: 6px 8px;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
-}
-
-.text-button.danger {
-  color: #ef4444;
-}
-
-.pager {
-  justify-content: flex-end;
-  margin-top: 9px;
-  color: #666666;
-  font-size: 12px;
-}
-
-.report-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(15, 23, 42, 0.38);
-  padding: 18px;
-}
-
-.report-modal__panel {
-  width: min(860px, 100%);
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 18px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
-}
-
-.report-modal__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 12px;
-}
-
-.report-modal__header h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.group-report {
-  display: grid;
-  gap: 16px;
-  padding-top: 14px;
-}
-
-.group-report h3 {
-  margin: 0 0 8px;
-  color: #111827;
-  font-size: 15px;
-}
-
-.group-report h4 {
-  margin: 0 0 6px;
-  color: #111827;
-  font-size: 13px;
-}
-
-.group-report p,
-.group-report li {
-  margin: 4px 0 0;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.group-report__files {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.group-report__files span {
-  border-radius: 8px;
-  background: #f1f5f9;
-  color: #334155;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.group-report__item {
-  border-left: 3px solid #2563eb;
-  border-radius: 6px;
-  background: #f8fafc;
-  padding: 10px 12px;
 }
 
 @media (max-width: 900px) {

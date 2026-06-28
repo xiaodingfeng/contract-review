@@ -111,6 +111,33 @@ export default {
         return apiClient.post(`/contracts/${contractId}/force-save`, payload);
     },
 
+    // 3.1 条款级增量审查:对比当前合同与上一版本,仅审查变更条款
+    reviewIncremental(contractId, payload = {}) {
+        return apiClient.post(`/contracts/${contractId}/review-incremental`, payload);
+    },
+
+    // 4.1 谈判博弈模拟:对修改建议模拟对方立场反向论证
+    simulateNegotiation(contractId, payload = {}) {
+        return apiClient.post(`/contracts/${contractId}/simulate-negotiation`, payload);
+    },
+
+    // 4.3 行业标准条款库
+    listStandards(params = {}) {
+        return apiClient.get('/standards', { params });
+    },
+    createStandard(payload) {
+        return apiClient.post('/standards', payload);
+    },
+    updateStandard(id, payload) {
+        return apiClient.put(`/standards/${id}`, payload);
+    },
+    deleteStandard(id) {
+        return apiClient.delete(`/standards/${id}`);
+    },
+    compareStandards(payload) {
+        return apiClient.post('/standards/compare', payload);
+    },
+
     getHistory() {
         return apiClient.get('/contracts/history');
     },

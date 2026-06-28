@@ -1,3 +1,23 @@
+/**
+ * @file routes/qa.js
+ * @brief 合同问答路由,基于知识库与联网检索构建上下文并由 LLM 生成回答
+ *
+ * 核心职责：
+ * - 提供 Q&A 历史查询、普通问答、流式问答(SSE)三种接口
+ * - 组装包含合同正文、知识库检索、联网检索的证据上下文
+ * - 持久化问答历史到 qa_history 表
+ *
+ * 关键实现：
+ * - buildQaKnowledgeQueries 拆分当前问题与历史感知问题,提升检索召回
+ * - shouldUseWebSearch 基于敏感词黑名单与关键词白名单决策是否联网
+ * - buildEvidencePrompt 将工具调用链、合同正文、知识库与联网结果结构化注入
+ * - /ask-stream 通过 SSE 推送 meta/delta/done 事件,实时回传生成内容
+ *
+ * 依赖关系：
+ * - 上游：express、mammoth、pdf-parse、database、services/vectorStore、services/webSearch、services/llmClient
+ * - 下游：被 index.js 挂载到 /api/qa
+ */
+
 const express = require('express');
 const mammoth = require('mammoth');
 const path = require('path');

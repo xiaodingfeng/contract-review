@@ -1,3 +1,20 @@
+/**
+ * @file routes/users.js
+ * @brief 用户路由,提供指纹识别与用户合同审查历史查询
+ *
+ * 核心职责：
+ * - /identify 基于浏览器指纹识别用户,不存在则自动创建
+ * - /:userId/history 返回指定用户的合同审查历史列表
+ *
+ * 关键实现：
+ * - users 表以 fingerprint_id 唯一标识用户,无需账号密码
+ * - history 接口按 created_at desc 排序,仅返回必要字段
+ *
+ * 依赖关系：
+ * - 上游：express、database、iconv-lite
+ * - 下游：被 index.js 挂载到 /api/users
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../database');

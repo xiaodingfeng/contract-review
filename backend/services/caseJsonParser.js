@@ -1,3 +1,23 @@
+/**
+ * @file services/caseJsonParser.js
+ * @brief 裁判文书 JSON 解析器，将案例文档转换为知识库结构化条目
+ *
+ * 核心职责：
+ * - 从案例 document 提取标题、案情、裁判理由、裁判结果
+ * - 生成稳定 source_id 与分类（charge）信息
+ * - 输出含 pid/charge/article 等字段的 metadata
+ *
+ * 关键实现：
+ * - normalizeText 规范化空白字符
+ * - stableId 基于 sourceFile+sourceKey+title 哈希生成
+ * - charge 数组拼接为分类，article 数组映射为 clause_id
+ * - 基本案情+裁判理由+裁判结果+全文拼接为 content
+ *
+ * 依赖关系：
+ * - 上游：path、crypto
+ * - 下游：案例同步入库调用 parseCaseJsonDocument
+ */
+
 const path = require('path');
 const crypto = require('crypto');
 

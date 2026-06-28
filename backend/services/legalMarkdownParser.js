@@ -1,3 +1,23 @@
+/**
+ * @file services/legalMarkdownParser.js
+ * @brief 法律法规 Markdown 解析器，提取条文层级与元信息为结构化条目
+ *
+ * 核心职责：
+ * - 解析 INFO 元信息块（标题/副标题/事件/施行日期）
+ * - 识别 markdown 标题层级与第X条条文
+ * - 生成稳定 source_id 与含层级/事件/时效的 metadata
+ *
+ * 关键实现：
+ * - INFO END 标记分隔元信息块与正文，无标记时取前 12 行
+ * - 第X条正则匹配，支持中文数字与阿拉伯数字
+ * - markdown 标题层级跟踪（h2-h6 映射深度）
+ * - stripComment 去除 HTML 注释，stableId 基于内容哈希生成
+ *
+ * 依赖关系：
+ * - 上游：fs、path、crypto
+ * - 下游：lawSync 调用 parseLegalMarkdownFile 入库
+ */
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');

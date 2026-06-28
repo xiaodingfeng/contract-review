@@ -1,3 +1,23 @@
+/**
+ * @file services/webSearch.js
+ * @brief 聚合搜索引擎服务，抓取 Bing/百度/360 三源结果并评分排序
+ *
+ * 核心职责：
+ * - 并发抓取三大搜索引擎 HTML 结果页并解析
+ * - 结果去重、按真实性与权威性评分排序
+ * - 提供企业信息搜索与企业名称抽取工具
+ *
+ * 关键实现：
+ * - cookie jar 跟随重定向，模拟浏览器请求头
+ * - iconv-lite 自动识别 gb18030/utf8 编码
+ * - 权威域名（gov.cn 等）加分、多源一致加分、HTTPS 加分
+ * - authenticity_score≥0.55 标记为 verified
+ *
+ * 依赖关系：
+ * - 上游：axios、iconv-lite
+ * - 下游：companyVerify 回退路径、搜索接口调用 searchWeb/searchCompanyInfo
+ */
+
 const axios = require('axios');
 const iconv = require('iconv-lite');
 
