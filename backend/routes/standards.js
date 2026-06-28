@@ -120,8 +120,9 @@ const seedPublicClausesIfEmpty = async () => {
     }
 };
 
-// 异步触发 seed,不阻塞路由加载
-seedPublicClausesIfEmpty().catch((err) => console.error('[Standards] seedPublicClausesIfEmpty error:', err));
+// seed 由 index.js startServer 在 resetAndRebuildDatabase 之后统一触发,确保 standard_clauses 表已创建
+// (此前在模块加载时触发,会因表尚未创建而静默失败,导致公共库条款从未被 seed)
+router.seedPublicClausesIfEmpty = seedPublicClausesIfEmpty;
 
 // 列表:支持 category/industry/owner 筛选;公共库全员可见,私有库仅 owner 可见
 router.get('/', async (req, res) => {

@@ -215,7 +215,7 @@ async function resetAndRebuildDatabase() {
     }
 
     await ensureVectorStore();
-    console.log('[DB Init] Vector store tables created. Vector index will be built from the knowledge base page.');
+    console.log('[DB Init] Vector store tables created. Vector index will be seeded in background after server.listen.');
 
     // 法律时效性字段扩展:为 vector_documents 表追加 law_status/superseded_by/effective_date
     // 旧数据 law_status 默认 '现行',不破坏现有检索;此处 ensureColumn 幂等,与 vectorStore.js 内部 addColumn 互为兜底

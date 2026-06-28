@@ -1,12 +1,12 @@
 <template>
   <section class="panel list-panel">
-    <!-- 向量数据库为空时的提示 -->
+    <!-- 向量数据库为空时的提示:后台正在异步导入,可手动点击重建同步 -->
     <div v-if="vectorStatusChecked && !vectorStatus.hasData && !rebuilding" class="vector-empty-banner">
       <div class="flex items-center gap-3">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
         <div>
-          <p class="font-semibold text-sm">向量数据库尚未构建</p>
-          <p class="text-xs text-gray-500">知识检索和合同审查需要向量数据库支持，请点击"重建向量数据库"进行初始化。</p>
+          <p class="font-semibold text-sm">向量数据库尚未同步</p>
+          <p class="text-xs text-gray-500">服务启动时会自动后台导入 PostgreSQL 数据并同步到向量数据库；如需立即同步可点击"重建向量数据库"。</p>
         </div>
       </div>
     </div>
@@ -18,11 +18,8 @@
         <span class="text-xs text-gray-500">{{ rebuildPercent }}%</span>
       </div>
       <el-progress :percentage="rebuildPercent" :stroke-width="8" :status="rebuildError ? 'exception' : ''" />
-      <div v-if="rebuildFileName" class="mt-2 text-xs text-gray-600 truncate">
-        <span class="text-gray-400">正在处理：</span>{{ rebuildFileName }}
-      </div>
-      <div v-if="rebuildChunks > 0" class="text-xs text-gray-400 mt-1">
-        已生成 {{ rebuildChunks }} 个切片
+      <div v-if="rebuildTotal > 0" class="mt-2 text-xs text-gray-600">
+        已同步 {{ rebuildSynced }} / {{ rebuildTotal }} 条向量数据
       </div>
       <div v-if="rebuildError" class="mt-2 text-xs text-red-500">{{ rebuildError }}</div>
     </div>
@@ -197,10 +194,11 @@ export default {
       }
     };
 
-    // 向量数据库重建（重建完成后刷新当前列表）
+    // 重建向量数据库:仅根据 PostgreSQL 已有数据同步到 Milvus,不删除/清空已有数据,
+    // 与启动时后台同步操作一致;重建完成后刷新知识列表。
     const {
-      rebuilding, rebuildPhase, rebuildPhaseLabel, rebuildFileName,
-      rebuildPercent, rebuildChunks, rebuildError,
+      rebuilding, rebuildPhase, rebuildPhaseLabel, rebuildPercent,
+      rebuildSynced, rebuildTotal, rebuildError,
       vectorStatus, vectorStatusChecked,
       checkVectorStatus, rebuildVectorDatabase,
     } = useVectorRebuild(loadKnowledge);
@@ -214,13 +212,13 @@ export default {
       searchQuery, sourceType, lawFilter,
       page, total, totalPages, items, loading,
       detailVisible, selectedKnowledgeDetail,
-      rebuilding, rebuildPhase, rebuildPhaseLabel, rebuildFileName,
-      rebuildPercent, rebuildChunks, rebuildError,
+      rebuilding, rebuildPhase, rebuildPhaseLabel, rebuildPercent,
+      rebuildSynced, rebuildTotal, rebuildError,
       vectorStatus, vectorStatusChecked,
       sourceLabel, lawStatusTagType,
       loadKnowledge, reloadFirstPage, changePage,
-      showKnowledgeDetail, deleteOne, deleteByType,
       rebuildVectorDatabase,
+      showKnowledgeDetail, deleteOne, deleteByType,
     };
   },
 };
@@ -242,8 +240,8 @@ export default {
   margin-bottom: 12px;
 }
 .rebuild-progress-panel {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 12px;

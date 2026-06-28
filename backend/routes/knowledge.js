@@ -32,9 +32,7 @@ const {
     searchVectorDocuments,
     deleteKnowledgeDocuments,
     listKnowledgeDocuments,
-    seedLawsFromMarkdown,
-    seedCasesFromJson,
-    clearAllVectorDocuments,
+    syncAllVectorDocuments,
 } = require('../services/vectorStore');
 const { parseLegalMarkdown, parseLegalMarkdownFile } = require('../services/legalMarkdownParser');
 const lawSync = require('../services/lawSync');
@@ -295,6 +293,8 @@ router.get('/vector-status', async (req, res) => {
 });
 
 // 重建向量数据库（SSE 流式返回进度）
+// 仅根据 PostgreSQL 已有数据(vector_documents)全量同步到 Milvus,不删除/清空已有数据,
+// 不重新解析文件;与启动时后台同步操作一致,覆盖所有 source_type,无遗漏。
 router.post('/rebuild', async (req, res) => {
     // 设置 SSE headers
     res.writeHead(200, {
@@ -312,49 +312,25 @@ router.post('/rebuild', async (req, res) => {
     };
 
     try {
-        console.log('[Knowledge] Rebuild vector database started...');
+        console.log('[Knowledge] Rebuild vector database started (PG -> Milvus sync, no delete)...');
+        await sendEvent({ phase: 'sync_start', message: '正在根据 PostgreSQL 数据同步向量数据库...' });
 
-        // 1. 清空现有数据
-        await sendEvent({ phase: 'clearing', message: '正在清空现有向量数据...' });
-        const clearResult = await clearAllVectorDocuments();
-        console.log(`[Knowledge] Cleared ${clearResult.deleted} existing vector documents.`);
-        await sendEvent({ phase: 'clearing_done', cleared: clearResult.deleted });
-
-        // 2. Seed 法条
-        await sendEvent({ phase: 'law_start', message: '开始导入法条数据...' });
-        const lawResult = await seedLawsFromMarkdown(async (progress) => {
+        const result = await syncAllVectorDocuments(async (progress) => {
             await sendEvent({
-                phase: 'law',
+                phase: 'sync',
                 current: progress.current,
                 total: progress.total,
-                fileName: progress.fileName,
-                chunks: progress.chunks,
             });
         });
-        await sendEvent({ phase: 'law_done', result: lawResult });
 
-        // 3. Seed 案例
-        await sendEvent({ phase: 'case_start', message: '开始导入案例数据...' });
-        const caseResult = await seedCasesFromJson(async (progress) => {
-            await sendEvent({
-                phase: 'case',
-                current: progress.current,
-                total: progress.total,
-                fileName: progress.fileName,
-                chunks: progress.chunks,
-            });
-        });
-        await sendEvent({ phase: 'case_done', result: caseResult });
-
-        // 4. 完成
         const summary = {
             phase: 'complete',
-            message: '向量数据库重建完成',
-            cleared: clearResult.deleted,
-            law: lawResult,
-            case: caseResult,
+            message: result.skipped
+                ? `向量数据库同步跳过:${result.reason}`
+                : `向量数据库重建完成,已同步 ${result.synced}/${result.total} 条`,
+            ...result,
         };
-        console.log('[Knowledge] Rebuild vector database completed.');
+        console.log(`[Knowledge] Rebuild vector database completed: synced ${result.synced}/${result.total}.`);
         await sendEvent(summary);
         res.end();
     } catch (error) {

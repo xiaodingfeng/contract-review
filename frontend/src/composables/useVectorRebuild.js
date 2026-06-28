@@ -1,37 +1,34 @@
 import { computed, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import api, { apiClient } from '../api';
+import { getUserId } from '../user';
 
 /**
  * 向量数据库重建相关的状态与逻辑。
- * 抽离自 Settings.vue / KnowledgeListPanel.vue，便于复用与维护。
+ *
+ * 重建语义:仅根据 PostgreSQL 已有数据(vector_documents)全量同步到 Milvus,
+ * 不删除/清空已有数据,不重新解析文件;与启动时后台同步操作一致。
  *
  * @param {Function} onRebuildComplete 重建完成后的回调（用于刷新知识列表等）
  */
 export function useVectorRebuild(onRebuildComplete) {
   const rebuilding = ref(false);
   const rebuildPhase = ref('');
-  const rebuildFileName = ref('');
   const rebuildPercent = ref(0);
-  const rebuildChunks = ref(0);
+  const rebuildSynced = ref(0);
+  const rebuildTotal = ref(0);
   const rebuildError = ref('');
   const vectorStatus = ref({ hasData: true, lawCount: 0, caseCount: 0, totalCount: 0 });
   const vectorStatusChecked = ref(false);
 
   const rebuildPhaseLabel = computed(() => {
     const labels = {
-      clearing: '正在清空现有数据...',
-      clearing_done: '清空完成',
-      law_start: '准备导入法条数据...',
-      law: '正在导入法条数据',
-      law_done: '法条导入完成',
-      case_start: '准备导入案例数据...',
-      case: '正在导入案例数据',
-      case_done: '案例导入完成',
-      complete: '重建完成',
-      error: '重建失败',
+      sync_start: '准备同步...',
+      sync: '正在同步 PostgreSQL 数据到向量数据库',
+      complete: '同步完成',
+      error: '同步失败',
     };
-    return labels[rebuildPhase.value] || rebuildPhase.value;
+    return labels[rebuildPhase.value] || '';
   });
 
   const checkVectorStatus = async () => {
@@ -45,38 +42,34 @@ export function useVectorRebuild(onRebuildComplete) {
   };
 
   const rebuildVectorDatabase = async () => {
-    try {
-      await ElMessageBox.confirm(
-        '将清空所有现有向量数据并重新生成。此过程可能需要几分钟，确定继续？',
-        '重建向量数据库',
-        { confirmButtonText: '确认重建', cancelButtonText: '取消', type: 'warning' },
-      );
-    } catch {
-      return;
-    }
+    if (rebuilding.value) return;
     rebuilding.value = true;
-    rebuildPhase.value = 'clearing';
-    rebuildFileName.value = '';
+    rebuildPhase.value = 'sync_start';
     rebuildPercent.value = 0;
-    rebuildChunks.value = 0;
+    rebuildSynced.value = 0;
+    rebuildTotal.value = 0;
     rebuildError.value = '';
+
     try {
-      const baseURL = apiClient.defaults.baseURL || '';
-      const token = apiClient.defaults.headers?.Authorization || '';
-      const response = await fetch(`${baseURL}/knowledge/rebuild`, {
+      // axios 不支持 ReadableStream,改用原生 fetch 调用 SSE 接口
+      const url = `${apiClient.defaults.baseURL}/knowledge/rebuild`;
+      const headers = { 'Content-Type': 'application/json' };
+      const userId = getUserId();
+      if (userId) headers['X-User-ID'] = String(userId);
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: token } : {}),
-        },
+        headers,
         body: JSON.stringify({}),
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const text = await response.text().catch(() => '');
+        throw new Error(text || `HTTP ${response.status}`);
       }
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+      const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let lastEvent = null;
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -84,53 +77,55 @@ export function useVectorRebuild(onRebuildComplete) {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
           try {
-            const data = JSON.parse(line.slice(6));
-            rebuildPhase.value = data.phase;
-            if (data.phase === 'law' || data.phase === 'case') {
-              rebuildFileName.value = data.fileName || '';
-              rebuildChunks.value = data.chunks || 0;
-              const totalItems = data.total || 1;
-              const current = data.current || 0;
-              if (data.phase === 'law') {
-                rebuildPercent.value = Math.round(5 + (current / totalItems) * 70);
+            const event = JSON.parse(jsonStr);
+            lastEvent = event;
+            rebuildPhase.value = event.phase;
+            if (event.phase === 'sync') {
+              rebuildSynced.value = event.current || 0;
+              rebuildTotal.value = event.total || 0;
+              rebuildPercent.value = event.total > 0
+                ? Math.min(100, Math.round((event.current / event.total) * 100))
+                : 0;
+            } else if (event.phase === 'complete') {
+              rebuildSynced.value = event.synced ?? rebuildSynced.value;
+              rebuildTotal.value = event.total ?? rebuildTotal.value;
+              rebuildPercent.value = 100;
+              if (event.skipped) {
+                ElMessage.warning(event.message || '向量数据库同步跳过');
               } else {
-                rebuildPercent.value = Math.round(75 + (current / totalItems) * 25);
+                ElMessage.success(event.message || '向量数据库重建完成');
               }
-            } else if (data.phase === 'clearing') {
-              rebuildPercent.value = 2;
-              rebuildFileName.value = '';
-            } else if (data.phase === 'clearing_done' || data.phase === 'law_start') {
-              rebuildPercent.value = 5;
-            } else if (data.phase === 'law_done' || data.phase === 'case_start') {
-              rebuildPercent.value = 75;
-              rebuildFileName.value = '';
-            } else if (data.phase === 'case_done') {
-              rebuildPercent.value = 100;
-              rebuildFileName.value = '';
-            } else if (data.phase === 'complete') {
-              rebuildPercent.value = 100;
-              rebuildPhase.value = 'complete';
-              const lawChunks = data.law?.chunks || 0;
-              const caseChunks = data.case?.chunks || 0;
-              ElMessage.success(`重建完成：清除 ${data.cleared || 0} 条，法条 ${lawChunks} 切片，案例 ${caseChunks} 切片。`);
-            } else if (data.phase === 'error') {
-              rebuildError.value = data.message || '重建失败';
-              ElMessage.error(data.message || '向量数据库重建失败。');
+            } else if (event.phase === 'error') {
+              rebuildError.value = event.message || '同步失败';
+              ElMessage.error(rebuildError.value);
             }
-          } catch {
-            // 忽略解析错误的行
+          } catch (parseError) {
+            // 忽略单行解析错误
           }
         }
       }
-      if (typeof onRebuildComplete === 'function') {
-        await onRebuildComplete();
+
+      // 兜底:流结束但未收到 complete 事件
+      if (rebuildPhase.value !== 'complete' && rebuildPhase.value !== 'error') {
+        if (lastEvent && lastEvent.phase === 'complete') {
+          // 已处理
+        } else if (!rebuildError.value) {
+          rebuildPhase.value = 'complete';
+          rebuildPercent.value = 100;
+          ElMessage.success('向量数据库重建完成');
+        }
       }
       await checkVectorStatus();
+      if (onRebuildComplete) await onRebuildComplete();
     } catch (error) {
-      rebuildError.value = error.message || '向量数据库重建失败。';
-      ElMessage.error('向量数据库重建失败。');
+      rebuildError.value = error.response?.data?.error || error.message || '向量数据库重建失败';
+      rebuildPhase.value = 'error';
+      ElMessage.error(rebuildError.value);
     } finally {
       rebuilding.value = false;
     }
@@ -140,9 +135,9 @@ export function useVectorRebuild(onRebuildComplete) {
     rebuilding,
     rebuildPhase,
     rebuildPhaseLabel,
-    rebuildFileName,
     rebuildPercent,
-    rebuildChunks,
+    rebuildSynced,
+    rebuildTotal,
     rebuildError,
     vectorStatus,
     vectorStatusChecked,

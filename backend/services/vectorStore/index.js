@@ -28,7 +28,7 @@ const { state, KNOWLEDGE_SEED_TYPES, LAW_SEED_FILE_BATCH_SIZE } = require('./con
 const { normalizeText, splitTextIntoChunks, splitIntoParagraphs, splitIntoParagraphGroups } = require('./textChunking');
 const { listConfiguredLawDirs, listMarkdownFiles, listCaseJsonFiles, fallbackLawEntryFromFile } = require('./seedSources');
 const { ensureRelationalVectorTable, upsertRelationalRow, listKnowledgeDocuments, sqliteVectorSearch, keywordSearch, mergeSearchResults } = require('./relationalStore');
-const { ensureMilvusCollection, upsertMilvusRows, hasMilvusRows, syncRelationalRowsToMilvus, deleteMilvusRows, milvusVectorSearch } = require('./milvusStore');
+const { ensureMilvusCollection, upsertMilvusRows, deleteMilvusRows, milvusVectorSearch } = require('./milvusStore');
 const { toVectorDocumentRows } = require('./documentMapping');
 
 const ensureVectorStore = async () => {
@@ -36,7 +36,9 @@ const ensureVectorStore = async () => {
     await ensureMilvusCollection();
 };
 
-const importKnowledgeEntries = async (entries) => {
+// 导入知识条目:双写 PG(vector_documents)与 Milvus。
+// skipMilvus=true 时仅写 PG,用于启动阶段先入库 PG、再由后台异步同步到 Milvus。
+const importKnowledgeEntries = async (entries, { skipMilvus = false } = {}) => {
     await ensureVectorStore();
     let imported = 0;
     let chunks = 0;
@@ -44,7 +46,7 @@ const importKnowledgeEntries = async (entries) => {
     let milvusRowsBuffer = [];
 
     const flushMilvusRows = async () => {
-        if (milvusRowsBuffer.length === 0) return;
+        if (skipMilvus || milvusRowsBuffer.length === 0) return;
         await upsertMilvusRows(milvusRowsBuffer);
         milvusRowsBuffer = [];
     };
@@ -80,9 +82,11 @@ const importKnowledgeEntries = async (entries) => {
             const result = await upsertRelationalRow(row);
             if (result.deduped) deduped += 1;
         }
-        milvusRowsBuffer.push(...uniqueRows);
-        if (milvusRowsBuffer.length >= 200) {
-            await flushMilvusRows();
+        if (!skipMilvus) {
+            milvusRowsBuffer.push(...uniqueRows);
+            if (milvusRowsBuffer.length >= 200) {
+                await flushMilvusRows();
+            }
         }
         imported += 1;
         chunks += uniqueRows.length;
@@ -92,7 +96,7 @@ const importKnowledgeEntries = async (entries) => {
     return { imported, chunks, deduped, vectorStore: state.milvusReady ? 'milvus' : 'relational-fallback' };
 };
 
-const seedLawsFromMarkdown = async (onProgress) => {
+const seedLawsFromMarkdown = async (onProgress, { skipMilvus = false } = {}) => {
     if (!KNOWLEDGE_SEED_TYPES.includes('law')) {
         console.log('[DB Init] Law seeding disabled by KNOWLEDGE_SEED_TYPES.');
         return { skipped: true, disabled: true };
@@ -106,12 +110,7 @@ const seedLawsFromMarkdown = async (onProgress) => {
     const existingLawCount = await db('vector_documents').where({ source_type: 'law' }).count({ count: '*' }).first();
     const forceReseed = String(process.env.FORCE_RESEED_LAWS || '').toLowerCase() === 'true';
     if (Number(existingLawCount?.count || 0) > 0 && !forceReseed) {
-        if (state.milvusReady && !await hasMilvusRows('law')) {
-            const synced = await syncRelationalRowsToMilvus('law');
-            console.log(`[DB Init] Relational law vectors exist; synced ${synced.synced} rows back to Milvus.`);
-            return { skipped: true, existing: Number(existingLawCount?.count || 0), ...synced };
-        }
-        console.log('[DB Init] Law vector index already contains data. Skipping startup reseed.');
+        console.log('[DB Init] Law data already in PostgreSQL. Skipping startup reseed.');
         return { skipped: true, existing: Number(existingLawCount?.count || 0) };
     }
 
@@ -160,7 +159,7 @@ const seedLawsFromMarkdown = async (onProgress) => {
             }
         }
         if (entries.length > 0) {
-            const result = await importKnowledgeEntries(entries);
+            const result = await importKnowledgeEntries(entries, { skipMilvus });
             totals.imported += result.imported || 0;
             totals.chunks += result.chunks || 0;
             totals.deduped += result.deduped || 0;
@@ -172,7 +171,7 @@ const seedLawsFromMarkdown = async (onProgress) => {
     return totals;
 };
 
-const seedCasesFromJson = async (onProgress) => {
+const seedCasesFromJson = async (onProgress, { skipMilvus = false } = {}) => {
     if (!KNOWLEDGE_SEED_TYPES.includes('case')) {
         console.log('[DB Init] Case seeding disabled by KNOWLEDGE_SEED_TYPES.');
         return { skipped: true, disabled: true };
@@ -186,12 +185,7 @@ const seedCasesFromJson = async (onProgress) => {
     const existingCaseCount = await db('vector_documents').where({ source_type: 'case' }).count({ count: '*' }).first();
     const forceReseed = String(process.env.FORCE_RESEED_CASES || '').toLowerCase() === 'true';
     if (Number(existingCaseCount?.count || 0) > 0 && !forceReseed) {
-        if (state.milvusReady && !await hasMilvusRows('case')) {
-            const synced = await syncRelationalRowsToMilvus('case');
-            console.log(`[DB Init] Relational case vectors exist; synced ${synced.synced} rows back to Milvus.`);
-            return { skipped: true, existing: Number(existingCaseCount?.count || 0), ...synced };
-        }
-        console.log('[DB Init] Case vector index already contains data. Skipping startup reseed.');
+        console.log('[DB Init] Case data already in PostgreSQL. Skipping startup reseed.');
         return { skipped: true, existing: Number(existingCaseCount?.count || 0) };
     }
 
@@ -231,7 +225,7 @@ const seedCasesFromJson = async (onProgress) => {
     }
 
     if (entries.length > 0) {
-        const result = await importKnowledgeEntries(entries);
+        const result = await importKnowledgeEntries(entries, { skipMilvus });
         totals.imported += result.imported || 0;
         totals.chunks += result.chunks || 0;
         totals.deduped += result.deduped || 0;
@@ -285,6 +279,42 @@ const clearAllVectorDocuments = async () => {
         await db('vector_documents').del();
     }
     return { deleted, vectorStore: state.milvusReady ? 'milvus' : 'relational-fallback' };
+};
+
+// 将 PG(vector_documents)全量同步到 Milvus,用于启动后台同步与"重建向量数据库"。
+// 仅 upsert(按 content_hash 去重更新),不删除 PG 已有数据,也不清空 Milvus;
+// Milvus 不可用时跳过并返回降级信息。与初始化时的同步操作完全一致,覆盖所有 source_type。
+const syncAllVectorDocuments = async (onProgress) => {
+    await ensureVectorStore();
+    if (!state.milvusReady) {
+        return { synced: 0, total: 0, vectorStore: 'relational-fallback', skipped: true, reason: 'Milvus not ready' };
+    }
+    const totalRow = await db('vector_documents').count({ count: '*' }).first();
+    const total = Number(totalRow?.count || 0);
+    if (total === 0) {
+        return { synced: 0, total: 0, vectorStore: 'milvus' };
+    }
+    let synced = 0;
+    let lastId = 0;
+    while (true) {
+        const rows = await db('vector_documents')
+            .where('id', '>', lastId)
+            .orderBy('id', 'asc')
+            .limit(200)
+            .select('*');
+        if (rows.length === 0) break;
+        lastId = rows[rows.length - 1].id;
+        const batch = rows.map((row) => ({
+            ...row,
+            embedding: JSON.parse(row.embedding || '[]'),
+        }));
+        await upsertMilvusRows(batch);
+        synced += batch.length;
+        if (onProgress) {
+            await onProgress({ current: synced, total });
+        }
+    }
+    return { synced, total, vectorStore: state.milvusReady ? 'milvus' : 'relational-fallback' };
 };
 
 const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], rerank = true, includeHistorical = false } = {}) => {
@@ -430,6 +460,7 @@ module.exports = {
     importKnowledgeEntries,
     deleteKnowledgeDocuments,
     clearAllVectorDocuments,
+    syncAllVectorDocuments,
     splitTextIntoChunks,
     splitIntoParagraphs,
     splitIntoParagraphGroups,

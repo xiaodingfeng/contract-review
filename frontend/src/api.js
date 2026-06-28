@@ -216,10 +216,6 @@ export default {
         return apiClient.get('/knowledge/template', { params: { type }, responseType: 'blob' });
     },
 
-    rebuildVectorDatabase() {
-        return apiClient.post('/knowledge/rebuild', {}, { timeout: 300000 });
-    },
-
     getVectorStatus() {
         return apiClient.get('/knowledge/vector-status');
     },

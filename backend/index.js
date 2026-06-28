@@ -31,6 +31,7 @@ const knowledgeRoutes = require('./routes/knowledge');
 const templateRoutes = require('./routes/templates');
 const standardRoutes = require('./routes/standards');
 const { seedTemplatesIfEmpty } = require('./services/reviewTemplates');
+const { seedLawsFromMarkdown, seedCasesFromJson, syncAllVectorDocuments } = require('./services/vectorStore');
 const db = require('./database');
 const resetAndRebuildDatabase = require('./database-check');
 
@@ -124,9 +125,42 @@ async function startServer() {
   await resetAndRebuildDatabase();
   // 启动时为空表 seed 审查模板(从 JSON 导入,标记 is_system=true,生成 embedding)
   await seedTemplatesIfEmpty();
+  // seed 公共标准条款(需在 standard_clauses 表创建后执行;原 standards.js 模块加载时触发会因表未创建而失败)
+  await standardRoutes.seedPublicClausesIfEmpty();
   server.listen(port, () => {
     console.log(`Backend server listening at http://localhost:${port}`);
+    // 后台异步:先把法律/案例入库 PostgreSQL(skipMilvus),再全量同步 PG -> Milvus
+    // 不阻塞主进程启动;前端"重建向量数据库"按钮执行同样的 PG -> Milvus 同步操作
+    seedKnowledgeInBackground();
   });
+}
+
+// 后台异步导入知识库:先入 PostgreSQL(skipMilvus 跳过 Milvus 双写),再同步 PG -> Milvus
+// 失败仅记录日志,不影响主进程;与前端"重建向量数据库"按钮调用同一个 syncAllVectorDocuments
+async function seedKnowledgeInBackground() {
+  const log = (msg) => console.log(`[Background Seed] ${msg}`);
+  log('Step 1/3: importing laws into PostgreSQL (skipMilvus)...');
+  try {
+    const lawResult = await seedLawsFromMarkdown(undefined, { skipMilvus: true });
+    log(`Laws import finished: ${JSON.stringify(lawResult)}`);
+  } catch (error) {
+    console.error(`[Background Seed] Laws import failed: ${error.message}`);
+  }
+  log('Step 2/3: importing cases into PostgreSQL (skipMilvus)...');
+  try {
+    const caseResult = await seedCasesFromJson(undefined, { skipMilvus: true });
+    log(`Cases import finished: ${JSON.stringify(caseResult)}`);
+  } catch (error) {
+    console.error(`[Background Seed] Cases import failed: ${error.message}`);
+  }
+  log('Step 3/3: syncing PostgreSQL -> Milvus (vector index)...');
+  try {
+    const syncResult = await syncAllVectorDocuments();
+    log(`Milvus sync finished: ${JSON.stringify(syncResult)}`);
+  } catch (error) {
+    console.error(`[Background Seed] Milvus sync failed: ${error.message}`);
+  }
+  log('Background knowledge import done.');
 }
 
 startServer();

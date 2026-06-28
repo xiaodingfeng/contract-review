@@ -60,11 +60,19 @@
     <!-- 同步法律对话框 -->
     <el-dialog v-model="syncDialogVisible" title="同步法律" width="min(640px, calc(100vw - 32px))">
       <el-radio-group v-model="syncMode" class="sync-mode-group">
+        <el-radio value="upload">上传文件</el-radio>
         <el-radio value="file">文件路径</el-radio>
         <el-radio value="markdown">Markdown 内容</el-radio>
       </el-radio-group>
 
-      <div v-if="syncMode === 'file'" class="sync-field">
+      <div v-if="syncMode === 'upload'" class="sync-field">
+        <label class="sync-label">选择法律 Markdown 文件</label>
+        <input type="file" accept=".md,.markdown" class="sync-file-input" @change="handleSyncFileChange" />
+        <p v-if="syncFileName" class="hint-text">已选择：{{ syncFileName }}</p>
+        <p class="hint-text">文件需符合法律法规模板格式（含 INFO 区块与"第X条"条文），可先下载模板参考。</p>
+      </div>
+
+      <div v-else-if="syncMode === 'file'" class="sync-field">
         <label class="sync-label">服务器 Markdown 文件路径</label>
         <el-input v-model="syncFilePath" placeholder="例如：backend/data/laws/民法典/合同编.md" />
       </div>
@@ -110,6 +118,8 @@ export default {
     const syncFilePath = ref('');
     const syncTitle = ref('');
     const syncMarkdown = ref('');
+    const syncFileName = ref('');
+    const syncFileContent = ref('');
     const syncSubmitting = ref(false);
 
     const loadLaws = async () => {
@@ -144,28 +154,67 @@ export default {
     };
 
     const openSyncDialog = () => {
-      syncMode.value = 'file';
+      syncMode.value = 'upload';
       syncFilePath.value = '';
       syncTitle.value = '';
       syncMarkdown.value = '';
+      syncFileName.value = '';
+      syncFileContent.value = '';
       syncDialogVisible.value = true;
     };
 
+    const handleSyncFileChange = (e) => {
+      const file = e.target.files[0];
+      if (!file) {
+        syncFileName.value = '';
+        syncFileContent.value = '';
+        return;
+      }
+      syncFileName.value = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        syncFileContent.value = String(ev.target.result || '');
+      };
+      reader.onerror = () => {
+        ElMessage.error('文件读取失败。');
+        syncFileName.value = '';
+        syncFileContent.value = '';
+      };
+      reader.readAsText(file);
+    };
+
+    // 前端预校验法律 Markdown 格式,避免不符合模板的文件提交后后端解析失败
+    const looksLikeLegalMarkdown = (content) => String(content || '').includes('<!-- INFO END -->')
+      && /^第[〇零一二两三四五六七八九十百千万亿\d]+条/m.test(content);
+
     const submitSync = async () => {
-      const payload = syncMode.value === 'file'
-        ? { filePath: syncFilePath.value.trim() }
-        : { title: syncTitle.value.trim(), markdown: syncMarkdown.value };
-      if (syncMode.value === 'file' && !payload.filePath) {
-        ElMessage.warning('请输入法律 Markdown 文件路径。');
-        return;
-      }
-      if (syncMode.value === 'markdown' && !payload.title) {
-        ElMessage.warning('请输入法律名称。');
-        return;
-      }
-      if (syncMode.value === 'markdown' && !payload.markdown.trim()) {
-        ElMessage.warning('请粘贴法律 Markdown 内容。');
-        return;
+      let payload;
+      if (syncMode.value === 'upload') {
+        if (!syncFileContent.value.trim()) {
+          ElMessage.warning('请选择法律 Markdown 文件。');
+          return;
+        }
+        if (!looksLikeLegalMarkdown(syncFileContent.value)) {
+          ElMessage.error('文件格式不符合法律 Markdown 模板要求：需包含 INFO 区块结束标记(<!-- INFO END -->)与"第X条"条文。请先下载模板参考。');
+          return;
+        }
+        payload = { markdown: syncFileContent.value };
+      } else if (syncMode.value === 'file') {
+        payload = { filePath: syncFilePath.value.trim() };
+        if (!payload.filePath) {
+          ElMessage.warning('请输入法律 Markdown 文件路径。');
+          return;
+        }
+      } else {
+        payload = { title: syncTitle.value.trim(), markdown: syncMarkdown.value };
+        if (!payload.title) {
+          ElMessage.warning('请输入法律名称。');
+          return;
+        }
+        if (!payload.markdown.trim()) {
+          ElMessage.warning('请粘贴法律 Markdown 内容。');
+          return;
+        }
       }
       syncSubmitting.value = true;
       try {
@@ -196,11 +245,13 @@ export default {
       syncFilePath,
       syncTitle,
       syncMarkdown,
+      syncFileName,
       syncSubmitting,
       lawStatusTagType,
       loadLaws,
       handleLawExpandChange,
       openSyncDialog,
+      handleSyncFileChange,
       submitSync,
     };
   },
@@ -343,6 +394,10 @@ button:disabled {
   font-size: 12px;
   font-weight: 800;
   color: #666666;
+}
+
+.sync-file-input {
+  font-size: 13px;
 }
 
 .dialog-footer {
