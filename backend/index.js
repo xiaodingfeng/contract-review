@@ -1,3 +1,23 @@
+/**
+ * @file index.js
+ * @brief 合同审查后端应用入口,启动 Express HTTP 与 Socket.io 服务
+ *
+ * 核心职责：
+ * - 加载并注册各业务路由(contracts/qa/users/knowledge/templates/standards)
+ * - 配置 CORS、JSON 解析、静态资源(public/uploads)等中间件
+ * - 建立 Socket.io 服务,支持合同分析进度实时推送与多端协作
+ * - 启动时执行数据库重建与审查模板 seed 初始化
+ *
+ * 关键实现：
+ * - 通过 app.set('io', io) 与 contractRoutes.setIoInstance(io) 将 io 注入路由
+ * - Multer 错误处理中间件统一返回文件大小/格式错误的 JSON 响应
+ * - startServer 串联数据库初始化、模板 seed、HTTP 监听三步流程
+ *
+ * 依赖关系：
+ * - 上游：dotenv、express、cors、socket.io、各 routes 模块、services/reviewTemplates、database、database-check
+ * - 下游：被进程启动入口调用,前端通过 HTTP/WebSocket 访问
+ */
+
 require('dotenv').config();
 
 const express = require('express');

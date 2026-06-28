@@ -1,3 +1,22 @@
+/**
+ * @file database.js
+ * @brief 创建并导出 PostgreSQL 数据库连接(Knex 实例)
+ *
+ * 核心职责：
+ * - 读取环境变量构造 PostgreSQL 连接配置
+ * - 创建 Knex 实例并配置连接池参数
+ * - 导出 Knex 实例供全局复用
+ *
+ * 关键实现：
+ * - 优先使用 DATABASE_URL,否则使用分项 POSTGRES_* 环境变量
+ * - 连接池 min/max 由 DB_POOL_MIN/DB_POOL_MAX 控制
+ * - Schema 初始化逻辑已迁移至 database-check.js,本文件仅负责连接
+ *
+ * 依赖关系：
+ * - 上游：knex、dotenv 提供的环境变量
+ * - 下游：被 routes、services、database-check 等几乎所有业务模块引用
+ */
+
 const knex = require('knex')({
   client: 'pg',
   connection: process.env.DATABASE_URL || {

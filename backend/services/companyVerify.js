@@ -1,3 +1,23 @@
+/**
+ * @file services/companyVerify.js
+ * @brief 企业风险核验服务，按 provider 路由到 Mock/天眼查/企查查/网页搜索多源核验
+ *
+ * 核心职责：
+ * - 判定企业风险等级（red/yellow/green）并生成建议文案
+ * - 支持 gsxt_mock / tiyanji / qichacha / web_search 多 provider 路由
+ * - 无 token 或第三方 API 失败时回退到网页搜索，兜底返回最小画像
+ *
+ * 关键实现：
+ * - red：失信被执行或主体吊销/注销；yellow：被执行/行政处罚/经营异常
+ * - 企查查 MD5(AppKey+TimeStamp+SecretKey) 签名鉴权
+ * - 网页搜索回退：正则从摘要提取法人/统一代码/风险关键词
+ * - 多级回退绝不抛错中断流程
+ *
+ * 依赖关系：
+ * - 上游：axios、crypto、webSearch
+ * - 下游：企业核验接口调用 verifyCompany
+ */
+
 const axios = require('axios');
 const crypto = require('crypto');
 const webSearch = require('./webSearch');

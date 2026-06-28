@@ -1,3 +1,23 @@
+/**
+ * @file services/reviewTemplates.js
+ * @brief 审查模板管理服务，提供模板加载、匹配与数据库种子能力
+ *
+ * 核心职责：
+ * - 从数据库或 JSON 文件加载审查模板（DB 优先，失败回退 JSON）
+ * - 按关键词命中数与语义相似度加权匹配合同模板
+ * - 启动时为空表注入模板并生成 typical_description 与 embedding
+ *
+ * 关键实现：
+ * - 混合匹配：关键词命中数 + 余弦相似度×5 加权
+ * - 混合合同（双模板得分均>0.7）返回数组，审查点取并集
+ * - embedding 失败时相似度降级为 0，不影响关键词匹配
+ * - 得分全为 0 时回退到 general 通用模板
+ *
+ * 依赖关系：
+ * - 上游：database（review_templates 表）、embeddingClient、data/reviewTemplates.json
+ * - 下游：合同审查服务调用 matchTemplate 选择模板
+ */
+
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
@@ -141,11 +161,28 @@ const keywordScore = (template, haystack) => (template.contract_type_keywords ||
     0,
 );
 
-// 模板匹配:关键词命中数 + 语义相似度 × 5 加权
+// 模板匹配:LLM 类型识别强匹配优先 → 关键词命中数 + 语义相似度 × 5 加权
 // 混合合同(两个模板得分均 > 0.7)返回数组,审查点取并集;否则返回单模板对象(向后兼容)
 const matchTemplate = async (contractType = '', text = '') => {
     const templates = await getAllTemplates();
     const haystack = `${contractType}\n${text}`.toLowerCase();
+
+    // 强匹配优先:LLM 已识别的 contract_type 直接命中某模板的核心类型词且唯一时,直接返回该模板
+    // 避免 embedding 相似度不稳定导致"劳动合同"被误判为"服务合同"等问题
+    if (contractType) {
+        const ctLower = contractType.toLowerCase();
+        const strongMatches = templates
+            .map((t) => ({
+                t,
+                kwHits: (t.contract_type_keywords || []).filter((k) => ctLower.includes(String(k).toLowerCase())).length,
+            }))
+            .filter((x) => x.kwHits > 0)
+            .sort((a, b) => b.kwHits - a.kwHits);
+        // 只有一个模板命中,或第一名命中数严格大于第二名,直接返回(多模板并列时走原逻辑保留混合合同检测)
+        if (strongMatches.length > 0 && (strongMatches.length === 1 || strongMatches[0].kwHits > strongMatches[1].kwHits)) {
+            return strongMatches[0].t;
+        }
+    }
 
     // 语义相似度:对合同文本生成 embedding,与每个模板的 typical_description_embedding 计算余弦相似度
     let textEmbedding = null;

@@ -1,3 +1,23 @@
+/**
+ * @file services/embeddingClient.js
+ * @brief 文本嵌入与重排序客户端，支持在线 API 调用与本地哈希回退
+ *
+ * 核心职责：
+ * - 批量文本嵌入（embedTexts）与单文本嵌入（embedText）
+ * - 文档重排序（rerankDocuments）
+ * - 嵌入服务就绪检查（ensureEmbeddingReady）
+ *
+ * 关键实现：
+ * - 默认模型 BAAI/bge-m3，重排序 BAAI/bge-reranker-v2-m3
+ * - 批量分块调用（默认每批 32 条），超批自动拆分
+ * - 配置缺失或在线失败时回退到本地 sha256 哈希向量（token + bigram）
+ * - rerank 失败时回退到原序截断
+ *
+ * 依赖关系：
+ * - 上游：axios、crypto
+ * - 下游：reviewTemplates（模板匹配）、vectorStore（向量入库）
+ */
+
 const axios = require('axios');
 const crypto = require('crypto');
 

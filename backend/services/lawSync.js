@@ -1,3 +1,24 @@
+/**
+ * @file services/lawSync.js
+ * @brief 法规同步服务，将法律 Markdown 同步到数据库与向量库并管理版本时效性
+ *
+ * 核心职责：
+ * - 解析 Markdown 写入 law_versions 表（冲突按 title+version_label 合并）
+ * - 条文入库向量库并回填时效性专属列（law_status/effective_date/superseded_by）
+ * - 标记同法律更早版本为"已修订"
+ * - 提供法律版本时间线查询
+ *
+ * 关键实现：
+ * - 中文日期（2021年1月1日）转 ISO 日期
+ * - 版本标识推断：优先"修正/修订"事件年份，回退施行年份
+ * - 按 effective_date 判定新旧版本，批量更新旧版 law_status
+ * - source_name 用 LIKE title% 兼容"民法典"与"民法典 - 合同编"两种格式
+ *
+ * 依赖关系：
+ * - 上游：fs、database、legalMarkdownParser、vectorStore
+ * - 下游：法规同步接口调用 syncLawFromMarkdown
+ */
+
 const fs = require('fs');
 const db = require('../database');
 const { parseLegalMarkdownFile } = require('./legalMarkdownParser');

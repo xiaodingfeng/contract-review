@@ -1,3 +1,22 @@
+/**
+ * @file services/llmClient.js
+ * @brief OpenAI 兼容大模型客户端封装，提供聊天与视觉补全调用及重试机制
+ *
+ * 核心职责：
+ * - 懒加载并复用 OpenAI 客户端实例（基于环境变量配置）
+ * - 提供聊天补全（createChatCompletion）与视觉补全（createVisionCompletion）接口
+ * - 对可重试错误（408/409/429/5xx）执行指数退避重试
+ *
+ * 关键实现：
+ * - 通过环境变量 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL 配置客户端
+ * - 视觉模型可通过 VISION_MODEL_NAME 指定，默认 Qwen2.5-VL
+ * - 重试次数、退避基数、超时均可通过环境变量调节
+ *
+ * 依赖关系：
+ * - 上游：openai 官方 SDK
+ * - 下游：incrementalReview、negotiationSimulator、reviewTemplates 等需要 LLM 的服务
+ */
+
 const { OpenAI } = require('openai');
 
 let llmClient;

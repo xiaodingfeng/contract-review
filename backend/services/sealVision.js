@@ -1,6 +1,22 @@
-// 印章与签名多模态视觉分析服务
-// 使用视觉大模型（Vision LLM）识别合同图片中的印章和签名，评估其合规性
-// 图片来源：DOCX 内嵌图片（adm-zip 提取）或 PDF 页面渲染（pdfjs-dist，可选）
+/**
+ * @file services/sealVision.js
+ * @brief 印章与签名多模态视觉分析服务，使用视觉大模型识别并评估合同图片合规性
+ *
+ * 核心职责：
+ * - 从 DOCX（adm-zip）或 PDF（pdfjs-dist）提取内嵌图片
+ * - 构造印章/签名分析 prompt，调用视觉模型识别
+ * - 输出印章类型、PS 痕迹、位置合规性、签名齐全度与整体风险等级
+ *
+ * 关键实现：
+ * - DOCX：从 word/media/ 提取 PNG/JPEG
+ * - PDF：pdfjs-dist + canvas 渲染指定页为图片（依赖缺失时返回空数组告警）
+ * - 视觉 API 失败抛错由调用方回退到 tesseract.js
+ * - JSON 解析容错：去 markdown 标记后兜底提取首个 JSON 对象
+ *
+ * 依赖关系：
+ * - 上游：path/fs、adm-zip、llmClient（createVisionCompletion）
+ * - 下游：印章分析接口调用 analyzeSeal
+ */
 
 const path = require('path');
 const fs = require('fs');

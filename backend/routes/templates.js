@@ -1,3 +1,24 @@
+/**
+ * @file routes/templates.js
+ * @brief 审查模板管理路由,支持模板 CRUD、版本快照与回滚
+ *
+ * 核心职责：
+ * - 提供模板列表、创建、编辑、删除、版本历史、回滚接口
+ * - 编辑/回滚前将当前状态写入 template_versions 快照表,支持版本回溯
+ * - 自动为模板描述生成 embedding,用于审查时的语义匹配
+ * - DB 不可用或表为空时回退到 JSON 文件,保证前端可用
+ *
+ * 关键实现：
+ * - 系统模板(is_system=true)禁止删除,用户创建的模板均为非系统模板
+ * - 回滚时先将当前状态写入新版本快照,再用目标版本覆盖,使回滚可逆
+ * - generateEmbeddingForDescription 失败时降级为关键词匹配
+ * - rowToTemplate 统一数据库行到接口对象的转换
+ *
+ * 依赖关系：
+ * - 上游：express、path、fs、database、services/reviewTemplates、services/embeddingClient
+ * - 下游：被 index.js 挂载到 /api/templates
+ */
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');

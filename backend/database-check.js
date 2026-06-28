@@ -1,3 +1,22 @@
+/**
+ * @file database-check.js
+ * @brief 数据库 Schema 校验与重建脚本,启动时幂等创建所有业务表
+ *
+ * 核心职责：
+ * - 检测并创建缺失的数据表(users/contracts/contract_versions/contract_groups/qa_history/focused_reviews/law_versions/standard_clauses/review_templates/template_versions)
+ * - 通过 ensureColumn 幂等补齐向量库与法律时效性字段
+ * - 调用 ensureVectorStore 初始化向量检索相关表
+ *
+ * 关键实现：
+ * - resetAndRebuildDatabase 采用"不存在则创建"策略,避免破坏已有数据
+ * - ensureColumn 封装 hasColumn 检测,缺失时执行 addColumn 回调
+ * - 失败时调用 process.exit(1) 终止进程,避免带病启动
+ *
+ * 依赖关系：
+ * - 上游：database(Knex 实例)、services/vectorStore
+ * - 下游：被 index.js 在 startServer 中调用
+ */
+
 const db = require('./database');
 const { ensureVectorStore } = require('./services/vectorStore');
 

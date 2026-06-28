@@ -1,6 +1,22 @@
-// 条款级增量审查服务
-// 在合同修订后，仅对发生变更的条款重新调 LLM 审查，并与历史风险点对比，
-// 标记已解决风险，避免对未变条款重复整篇审查。
+/**
+ * @file services/incrementalReview.js
+ * @brief 条款级增量审查服务，仅对变更条款调 LLM 审查并标记已解决风险
+ *
+ * 核心职责：
+ * - 对比新旧版本合同条款树，按 clause_id 产出条款级 diff
+ * - 对 needs_review 的变更条款独立调 LLM 审查
+ * - 与历史风险点对比，标记已解决风险
+ *
+ * 关键实现：
+ * - 字符 bigram Jaccard 相似度判定 modified/added/deleted
+ * - 相似度<=0.5 视为旧条删除+新条新增
+ * - chunk 并发限流（每批 3 条），避免 LLM 并发过高
+ * - 已解决风险判定：original_clause 曾在旧版且不再在新版
+ *
+ * 依赖关系：
+ * - 上游：contractParser、llmClient、database
+ * - 下游：合同修订审查接口调用 runIncrementalReview
+ */
 
 const { parseContractTree } = require('./contractParser');
 const { createChatCompletion } = require('./llmClient');

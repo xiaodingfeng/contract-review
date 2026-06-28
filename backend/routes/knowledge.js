@@ -1,3 +1,24 @@
+/**
+ * @file routes/knowledge.js
+ * @brief 知识库管理路由,负责法律法条与案例的导入、检索、同步与重建
+ *
+ * 核心职责：
+ * - 提供知识库模板下载、向量检索、列表、单条/批量导入、删除等接口
+ * - 支持法律 Markdown 解析与案例 JSON 解析,自动入库向量库
+ * - 通过 SSE 流式返回向量数据库重建进度
+ * - 提供法律版本同步与时间线查询接口
+ *
+ * 关键实现：
+ * - 使用 multer 处理批量文件上传,支持 docx/pdf 文本提取
+ * - normalizeKnowledgeEntries 自动识别法律 Markdown 并拆分为条款级条目
+ * - /rebuild 接口通过 SSE 推送 clearing/law/case/complete 各阶段进度
+ * - /laws/sync 支持传入文件路径或 Markdown 内容同步法律版本
+ *
+ * 依赖关系：
+ * - 上游：express、multer、mammoth、pdf-parse、database、services/vectorStore、services/legalMarkdownParser、services/lawSync
+ * - 下游：被 index.js 挂载到 /api/knowledge
+ */
+
 const express = require('express');
 const multer = require('multer');
 const path = require('path');

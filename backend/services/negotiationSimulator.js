@@ -1,6 +1,21 @@
-// 谈判博弈模拟服务
-// 对每条修改建议,模拟对方立场反向论证,输出反驳理由、折中方案、谈判话术。
-// 复用 llmClient.createChatCompletion,JSON 输出。
+/**
+ * @file services/negotiationSimulator.js
+ * @brief 谈判博弈模拟服务，对修改建议模拟对方立场反向论证并输出谈判话术
+ *
+ * 核心职责：
+ * - 从用户立场推断对方立场（甲乙/买卖/租赁/雇佣等对应关系）
+ * - 对单条修改建议构造谈判推演 prompt
+ * - 输出对方反驳理由、折中方案、可朗读谈判话术
+ *
+ * 关键实现：
+ * - 复用 llmClient.createChatCompletion，强制 JSON 输出
+ * - 批量并发度 2，单条失败不中断整批
+ * - 清理 LLM 返回中的 markdown 与 think 标记后解析
+ *
+ * 依赖关系：
+ * - 上游：llmClient
+ * - 下游：谈判推演接口调用 simulateNegotiationBatch
+ */
 
 const { createChatCompletion } = require('./llmClient');
 

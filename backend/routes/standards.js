@@ -1,6 +1,23 @@
-// 行业标准条款库路由(P3 4.3)
-// 提供标准条款的 CRUD 与相似度对比,审查时自动对比提示差异。
-// embedding 通过 vectorStore.importKnowledgeEntries 入库到 vector_documents 表(source_type='standard_clause')
+/**
+ * @file routes/standards.js
+ * @brief 行业标准条款库路由,提供标准条款 CRUD 与相似度对比
+ *
+ * 核心职责：
+ * - 提供标准条款的列表、创建、编辑、删除、相似度对比接口
+ * - 启动时 seed 公共库(保密/违约/知识产权/争议解决/不可抗力 5 类)
+ * - 区分公共库与私有库,私有库仅 owner 可编辑/删除
+ * - 条款变更同步写入向量库,供审查时自动对比提示差异
+ *
+ * 关键实现：
+ * - 通过 X-User-ID 头/请求体识别用户,requireUserId 强制鉴权
+ * - 编辑/删除接口校验 owner_type=private 且 owner_user_id 一致
+ * - /compare 接口调用 searchVectorDocumentsMulti 返回 top-N 相似条款
+ * - embedding 通过 vectorStore.importKnowledgeEntries 入库到 vector_documents(source_type='standard_clause')
+ *
+ * 依赖关系：
+ * - 上游：express、database、services/vectorStore
+ * - 下游：被 index.js 挂载到 /api/standards
+ */
 
 const express = require('express');
 const db = require('../database');

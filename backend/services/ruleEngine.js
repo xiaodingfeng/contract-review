@@ -1,6 +1,22 @@
-// 硬性合规检查规则引擎
-// 基于 reviewRules.json 定义的数字约束规则，对合同文本进行结构化校验，
-// 与 LLM 审查形成双轨机制：规则引擎覆盖强制性数字红线，LLM 聚焦语义层风险。
+/**
+ * @file services/ruleEngine.js
+ * @brief 硬性合规检查规则引擎，基于规则定义对合同文本进行数字约束校验
+ *
+ * 核心职责：
+ * - 加载 reviewRules.json 规则与 external_values.json 外部基准值（如 LPR）
+ * - 通过关键词定位条款，从条款文本中提取数字
+ * - 按约束运算符评估数字是否合规，输出违规与通过列表
+ *
+ * 关键实现：
+ * - 支持中文数字（"两年"→2、"百分之五"→5）与阿拉伯数字提取
+ * - 支持 %、年、月 等单位过滤，按 number_field 就近匹配
+ * - 支持 value_expr 表达式（如 lpr_4x = lpr_rate * 4）
+ * - 与 LLM 审查形成双轨：规则引擎覆盖数字红线，LLM 聚焦语义风险
+ *
+ * 依赖关系：
+ * - 上游：fs/path、data/reviewRules.json、data/external_values.json
+ * - 下游：合同审查服务调用 runRules 执行合规校验
+ */
 
 const fs = require('fs');
 const path = require('path');
