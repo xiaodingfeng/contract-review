@@ -28,6 +28,8 @@ const KNOWLEDGE_SEED_TYPES = String(process.env.KNOWLEDGE_SEED_TYPES || 'law,cas
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 const LAW_SEED_FILE_BATCH_SIZE = Math.max(1, Number(process.env.LAW_SEED_FILE_BATCH_SIZE || 20));
+// CASE_SEED_FILE_BATCH_SIZE:案例 JSON 文件分批入库大小,避免一次性把所有文件解析结果累积在内存导致 OOM
+const CASE_SEED_FILE_BATCH_SIZE = Math.max(1, Number(process.env.LAW_SEED_FILE_BATCH_SIZE || 20));
 // CASE_SEED_LIMIT:未设置(空)时不限制数量,获取目录下所有文件;设为正整数时限制文件数;设为 0 表示不导入
 const rawCaseSeedLimit = process.env.CASE_SEED_LIMIT;
 const CASE_SEED_LIMIT = (rawCaseSeedLimit === undefined || rawCaseSeedLimit === '')
@@ -49,6 +51,7 @@ module.exports = {
     VECTOR_FIELD,
     KNOWLEDGE_SEED_TYPES,
     LAW_SEED_FILE_BATCH_SIZE,
+    CASE_SEED_FILE_BATCH_SIZE,
     CASE_SEED_LIMIT,
     MILVUS_CONNECT_TIMEOUT_MS,
     state,

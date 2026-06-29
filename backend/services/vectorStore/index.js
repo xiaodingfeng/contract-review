@@ -24,7 +24,7 @@ const { EMBEDDING_DIM, embedText, ensureEmbeddingReady, rerankDocuments } = requ
 const { parseLegalMarkdownFile } = require('../legalMarkdownParser');
 const { parseCaseJsonDocument } = require('../caseJsonParser');
 
-const { state, KNOWLEDGE_SEED_TYPES, LAW_SEED_FILE_BATCH_SIZE } = require('./config');
+const { state, KNOWLEDGE_SEED_TYPES, LAW_SEED_FILE_BATCH_SIZE, CASE_SEED_FILE_BATCH_SIZE } = require('./config');
 const { normalizeText, splitTextIntoChunks, splitIntoParagraphs, splitIntoParagraphGroups } = require('./textChunking');
 const { listConfiguredLawDirs, listMarkdownFiles, listCaseJsonFiles, fallbackLawEntryFromFile } = require('./seedSources');
 const { ensureRelationalVectorTable, upsertRelationalRow, listKnowledgeDocuments, sqliteVectorSearch, keywordSearch, mergeSearchResults } = require('./relationalStore');
@@ -199,38 +199,42 @@ const seedCasesFromJson = async (onProgress, { skipMilvus = false } = {}) => {
         await deleteKnowledgeDocuments({ sourceType: 'case' });
     }
 
-    const entries = [];
     const totals = { imported: 0, chunks: 0, deduped: 0, files: 0, failed: 0, vectorStore: state.milvusReady ? 'milvus' : 'relational-fallback' };
-    for (let idx = 0; idx < files.length; idx += 1) {
-        const filePath = files[idx];
-        const sourceFile = path.relative(path.join(__dirname, '..', '..'), filePath);
-        const fileName = path.basename(filePath);
-        try {
-            const parsed = parseCaseJsonDocument(JSON.parse(fs.readFileSync(filePath, 'utf8')), { sourceFile });
-            if (parsed) entries.push(parsed);
-            totals.files += 1;
-        } catch (error) {
-            totals.failed += 1;
-            console.warn(`[DB Init] Failed to parse case JSON ${sourceFile}: ${error.message}`);
+    for (let i = 0; i < files.length; i += CASE_SEED_FILE_BATCH_SIZE) {
+        const batch = files.slice(i, i + CASE_SEED_FILE_BATCH_SIZE);
+        const entries = [];
+        for (let j = 0; j < batch.length; j += 1) {
+            const filePath = batch[j];
+            const sourceFile = path.relative(path.join(__dirname, '..', '..'), filePath);
+            const fileName = path.basename(filePath);
+            try {
+                const parsed = parseCaseJsonDocument(JSON.parse(fs.readFileSync(filePath, 'utf8')), { sourceFile });
+                if (parsed) entries.push(parsed);
+                totals.files += 1;
+            } catch (error) {
+                totals.failed += 1;
+                console.warn(`[DB Init] Failed to parse case JSON ${sourceFile}: ${error.message}`);
+            }
+            if (onProgress) {
+                await onProgress({
+                    phase: 'case',
+                    current: i + j + 1,
+                    total: files.length,
+                    fileName,
+                    chunks: totals.chunks,
+                });
+            }
         }
-        if (onProgress) {
-            await onProgress({
-                phase: 'case',
-                current: idx + 1,
-                total: files.length,
-                fileName,
-                chunks: totals.chunks,
-            });
+        if (entries.length > 0) {
+            const result = await importKnowledgeEntries(entries, { skipMilvus });
+            totals.imported += result.imported || 0;
+            totals.chunks += result.chunks || 0;
+            totals.deduped += result.deduped || 0;
+            totals.vectorStore = result.vectorStore || totals.vectorStore;
         }
+        console.log(`[DB Init] Case seed progress: ${Math.min(i + batch.length, files.length)}/${files.length} files, ${totals.chunks} chunks.`);
     }
 
-    if (entries.length > 0) {
-        const result = await importKnowledgeEntries(entries, { skipMilvus });
-        totals.imported += result.imported || 0;
-        totals.chunks += result.chunks || 0;
-        totals.deduped += result.deduped || 0;
-        totals.vectorStore = result.vectorStore || totals.vectorStore;
-    }
     console.log(`[DB Init] Case seed finished: ${totals.files}/${files.length} files, ${totals.chunks} chunks.`);
     return totals;
 };
