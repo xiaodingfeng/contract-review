@@ -334,7 +334,7 @@ const extractCompanyNames = (text) => {
 };
 
 const searchCompanyInfo = async (companyName) => {
-    const query = `${companyName} 国家企业信用信息公示系统 工商 登记 法定代表人`;
+    const query = `${companyName} 统一社会信用代码`;
     const results = await searchWeb(query, { count: 5 });
     return {
         companyName,

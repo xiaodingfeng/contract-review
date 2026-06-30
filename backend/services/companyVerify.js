@@ -218,7 +218,21 @@ const verifyByQichacha = async (name) => {
     profile.suggestion = buildSuggestion(profile);
     return profile;
 };
-
+/**
+ * 从单条文本中尝试提取某个字段，按给定的正则数组顺序匹配
+ * @param {string} text 待匹配文本
+ * @param {RegExp[]} patterns 正则表达式数组，按优先级排列
+ * @returns {string} 提取到的值，失败返回空串
+ */
+const extractField = (text, patterns) => {
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1] && match[1].trim()) {
+            return match[1].trim();
+        }
+    }
+    return '';
+};
 /**
  * 基于网页搜索结果构建简化版 CompanyRiskProfile
  * 用于无 token 或第三方 API 失败时的回退路径
@@ -229,19 +243,99 @@ const verifyByQichacha = async (name) => {
 const buildProfileFromWebSearch = async (name, webResult) => {
     const result = webResult || await webSearch.searchCompanyInfo(name).catch(() => null);
     const results = result?.results || [];
-    // 从网页摘要中尝试提取关键信息(法定代表人/统一社会信用代码)
-    const joinedSnippet = results.map((r) => `${r.title} ${r.snippet}`).join(' ');
-    const legalMatch = joinedSnippet.match(/(?:法定代表人|法人)[^\u4e00-\u9fa5]*([\u4e00-\u9fa5]{2,4})/);
-    const codeMatch = joinedSnippet.match(/(?:统一社会信用代码|信用代码)[^\dA-Z]*([0-9A-Z]{15,18})/);
-    const statusMatch = joinedSnippet.match(/(?:状态|经营状态)[^\u4e00-\u9fa5]*([\u4e00-\u9fa5]{2,6})/);
+
+    // 按可信度排序，优先从高质量结果中提取
+    const sortedResults = [...results].sort((a, b) => (b.authenticity_score || 0) - (a.authenticity_score || 0));
+
+    // 提取所有候选文本（title + snippet），过滤掉明显不相关的条目
+    const candidateTexts = sortedResults
+        .filter((r) => r.title.includes(name) || r.snippet.includes(name))
+        .map((r) => `${r.title} ${r.snippet}`);
+
+    // 合并所有文本用于风险关键词检测
+    const joinedSnippet = candidateTexts.join(' ');
+
+    // 多模式正则定义：统一社会信用代码（18位字母数字，含关键词辅助）
+    const codePatterns = [
+        /统一社会信用代码[：: ]*([0-9A-HJ-NP-Z]{18})/i,
+        /信用代码[：: ]*([0-9A-HJ-NP-Z]{18})/i,
+        /统一社会信用代码[：: ]*([0-9A-Z]{18})/i,   // 宽松匹配
+        /信用代码[：: ]*([0-9A-Z]{18})/i,
+        /(?:统一社会信用代码|信用代码|代码)[^0-9A-Z]*([0-9A-Z]{18})/i,
+        // 无关键词时尝试匹配独立18位码（可能误判，但作为兜底）
+        /(?:^|\s)([0-9A-HJ-NP-Z]{18})(?:\s|$)/i,
+    ];
+
+    // 法定代表人
+    const legalPatterns = [
+        // 1. 最明确：法定代表人：或空格 + 姓名
+        /法定代表人[：:\s]+([\u4e00-\u9fa5]{2,4})/,
+        // 2. 法定代表人 是/为 + 姓名
+        /法定代表人(?:是|为)\s*([\u4e00-\u9fa5]{2,4})/,
+        // 3. 法定代表人后面任意分隔符，最后取2-4汉字
+        /法定代表人[^：:\w]{0,3}[：:\s]*([\u4e00-\u9fa5]{2,4})/,
+        // 4. 退而求其次：仅靠“法人”匹配（但需避免误抓）
+        /(?:^|\s)法人[：:\s]+([\u4e00-\u9fa5]{2,4})/,
+        // 5. 最后兜底：直接找“法定代表人”附近的2-4汉字
+        /法定代表人[\s\S]{0,10}?([\u4e00-\u9fa5]{2,4})/,
+    ];
+
+    // 注册资本
+    const capitalPatterns = [
+        /注册资本[：: ]*([\d.]+)\s*万?元?/,
+        /注册资金[：: ]*([\d.]+)\s*万?元?/,
+        /注册资本[^：:]*[：: ]*([\d.]+)\s*万?元?/,
+    ];
+
+    // 成立日期
+    const datePatterns = [
+        /成立日期[：: ]*(\d{4}[-年]\d{1,2}[-月]\d{1,2})/,
+        /成立时间[：: ]*(\d{4}[-年]\d{1,2}[-月]\d{1,2})/,
+        /成立于[：: ]*(\d{4}[-年]\d{1,2}[-月]\d{1,2})/,
+        /(\d{4}-\d{2}-\d{2})/,
+    ];
+
+    // 经营状态
+    const statusPatterns = [
+        /(?:经营状态|企业状态|状态)[：: ]*([\u4e00-\u9fa5]{2,6})/,
+        /目前处于([\u4e00-\u9fa5]{2,6})状态/,
+        /(开业|在营|存续|吊销|注销|迁出|停业)/,
+    ];
+
+    // 逐字段提取，优先从高可信度的文本中获取
+    let unified_code = '';
+    let legal_representative = '';
+    let registered_capital = '';
+    let establish_date = '';
+    let company_status = '';
+
+    for (const text of candidateTexts) {
+        if (!unified_code) unified_code = extractField(text, codePatterns);
+        if (!legal_representative) legal_representative = extractField(text, legalPatterns);
+        if (!registered_capital) registered_capital = extractField(text, capitalPatterns);
+        if (!establish_date) establish_date = extractField(text, datePatterns);
+        if (!company_status) company_status = extractField(text, statusPatterns);
+        // 如果所有字段都已获取，可提前退出
+        if (unified_code && legal_representative && registered_capital && establish_date && company_status) break;
+    }
+
+    // 格式化日期为 YYYY-MM-DD
+    if (establish_date) {
+        establish_date = establish_date.replace(/[年月]/g, '-').replace(/日/, '').replace(/\s+/g, '');
+        // 确保月份和日期补零 (简单处理)
+        const parts = establish_date.split('-');
+        if (parts.length === 3) {
+            establish_date = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        }
+    }
 
     const profile = {
         company_name: name,
-        unified_code: codeMatch?.[1] || '',
-        legal_representative: legalMatch?.[1] || '',
-        registered_capital: '',
-        establish_date: '',
-        company_status: statusMatch?.[1] || '',
+        unified_code: unified_code || '',
+        legal_representative: legal_representative || '',
+        registered_capital: registered_capital || '',
+        establish_date: establish_date || '',
+        company_status: company_status || '',
         is_dishonest: false,
         is_executed: false,
         has_admin_punishment: false,
@@ -255,7 +349,8 @@ const buildProfileFromWebSearch = async (name, webResult) => {
         queried_at: new Date().toISOString(),
         web_search_results: results,
     };
-    // 从摘要中识别风险关键词
+
+    // 风险关键词检测
     const text = joinedSnippet.toLowerCase();
     if (/失信|老赖/.test(text)) {
         profile.is_dishonest = true;
@@ -273,6 +368,7 @@ const buildProfileFromWebSearch = async (name, webResult) => {
         profile.has_admin_punishment = true;
         profile.risk_items.push({ type: '行政处罚', detail: '网页摘要提及行政处罚', date: '' });
     }
+
     profile.risk_level = determineRiskLevel(profile);
     profile.suggestion = buildSuggestion(profile);
     return profile;
