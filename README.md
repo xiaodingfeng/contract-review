@@ -4,7 +4,7 @@
 
 如需帮助，可微信联系
 
-<img width="200" height="200" alt="c72ca6981647870527ef8cd21ac141e8" src="https://github.com/user-attachments/assets/bd92b593-dfda-4f70-aa84-bed96b559567" />
+<img width="200" height="250" alt="c72ca6981647870527ef8cd21ac141e8" src="https://github.com/user-attachments/assets/bd92b593-dfda-4f70-aa84-bed96b559567" />
 
 ## ✨ Features
 
@@ -378,4 +378,6 @@ MIT
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=xiaodingfeng/contract-review\&type=Date)](https://www.star-history.com/#xiaodingfeng/contract-review\&Date)
+## Star History
+
+[![Star History Chart](https://api.star-history.com/chart?repos=xiaodingfeng/contract-review&type=date&legend=top-left&sealed_token=ss0QmgJTyGQ2QoMe5CY8kK6ncujDCEClp5r_2zWZOBhfAziQm6MlW8IpWrv4QkylbQ9Bqb0168_b2qgMTOplmjbW2zvx3v6u1nsZL1XjmOILDrQRhW1lUQ)](https://www.star-history.com/?repos=xiaodingfeng%2Fcontract-review&type=date&legend=top-left)
