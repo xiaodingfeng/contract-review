@@ -21,6 +21,13 @@
 const axios = require('axios');
 const iconv = require('iconv-lite');
 
+let youcomSearch = null;
+try {
+    youcomSearch = require('./youcomSearch');
+} catch (e) {
+    // youcomSearch not available
+}
+
 const DEFAULT_TIMEOUT = 8000;
 
 const AUTHORITY_DOMAINS = [
@@ -308,6 +315,19 @@ const verifySearchResults = (query, results) => uniqueResults(results)
     .sort((a, b) => b.authenticity_score - a.authenticity_score);
 
 const searchWeb = async (query, { count = 5 } = {}) => {
+    // Try You.com first if enabled and available
+    const youcomEnabled = process.env.YOUCOM_SEARCH_ENABLED !== 'false' && youcomSearch;
+    if (youcomEnabled) {
+        const youcomResults = await youcomSearch.searchWeb(query, { count }).catch((error) => {
+            console.warn(`[WebSearch] You.com failed: ${error.message}`);
+            return [];
+        });
+        if (youcomResults.length > 0) {
+            return youcomResults;
+        }
+    }
+
+    // Fall back to Bing/Baidu/360 HTML scraping
     const jobs = [
         bingSearch(query, count).catch((error) => {
             console.warn(`[WebSearch] Bing HTML failed: ${error.message}`);
@@ -335,6 +355,19 @@ const extractCompanyNames = (text) => {
 
 const searchCompanyInfo = async (companyName) => {
     const query = `${companyName} 统一社会信用代码`;
+
+    // Try You.com Research API first if available
+    if (youcomSearch) {
+        const info = await youcomSearch.searchCompanyInfo(companyName).catch((error) => {
+            console.warn(`[WebSearch] You.com Research failed: ${error.message}`);
+            return null;
+        });
+        if (info && info.results.length > 0) {
+            return info;
+        }
+    }
+
+    // Fall back to regular search
     const results = await searchWeb(query, { count: 5 });
     return {
         companyName,
