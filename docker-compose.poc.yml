@@ -64,7 +64,7 @@ services:
       EXAMPLE_ENABLED: "false"
       NGINX_ACCESS_LOG: "false"
     ports:
-      - "${ONLYOFFICE_PORT:-8081}:80"
+      - "127.0.0.1:${ONLYOFFICE_PORT:-8081}:80"
     shm_size: "1gb"
     volumes:
       - onlyoffice_data:/var/www/onlyoffice/Data

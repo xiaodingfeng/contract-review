@@ -35,7 +35,7 @@ third command as a line such as `review:<hash>` in
 Set `APP_HOST` to the browser-visible service URL. Fill in the OpenAI-compatible
 `LLM_*` variables before expecting real AI review output. Set
 `ONLYOFFICE_PUBLIC_URL` to the browser-visible Document Server URL, normally
-`http://<server-ip>:8081/`. The JWT secret is shared by the backend and
+`http://<server-ip>:8080/onlyoffice/`. The JWT secret is shared by the backend and
 Document Server through the compose configuration.
 
 ## 3. Start and verify
@@ -48,9 +48,10 @@ curl -fsS http://127.0.0.1:8080/healthz
 curl -fsS http://127.0.0.1:8081/healthcheck
 ```
 
-The application endpoint is port `8080` and ONLYOFFICE is port `8081` by
-default. Set `APP_PORT` or `ONLYOFFICE_PORT` when different host ports are
-required. Both ports must be reachable by trial users.
+The application endpoint is port `8080`. ONLYOFFICE is available to trial users
+under `/onlyoffice/` on the same authenticated origin. Its direct port `8081`
+is bound to server loopback for diagnostics only. Set `APP_PORT` or
+`ONLYOFFICE_PORT` when different host ports are required.
 
 ## POC boundaries
 
