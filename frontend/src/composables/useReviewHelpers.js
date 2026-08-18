@@ -65,6 +65,15 @@ export function useReviewHelpers(state) {
         item.after,
     );
 
+    const isMissingClauseSuggestion = (item) => {
+        const operation = String(item?.operation || item?.action || '').trim().toLowerCase();
+        if (['append', 'insert', 'add'].includes(operation)) return true;
+        if (item?.is_missing === true || item?.missing_clause === true) return true;
+
+        const original = String(suggestionOriginal(item) || '').trim();
+        return /^(?:合同(?:全文)?|本合同)?\s*(?:未|没有)(?:约定|提及|包含|明确|设置|规定|涉及)|^(?:无相关条款|缺少相关条款)/.test(original);
+    };
+
     const suggestionCitations = (item) => {
         if (Array.isArray(item.citations) && item.citations.length) return item.citations;
         if (Array.isArray(item.basis) && item.basis.length) return item.basis;
@@ -308,6 +317,7 @@ export function useReviewHelpers(state) {
         disputeTitle, disputeDescription, missingClauseTitle,
         partyReviewTitle, partyReviewDescription,
         suggestionTitle, suggestionOriginal, suggestionText, suggestionReason, suggestionCitations,
+        isMissingClauseSuggestion,
         companyRiskLabel, companyRiskBadgeClass, companyCardBorderClass, toggleCompanyCard,
         dataSourceLabel, dataSourceClass, isLawOutdated,
         sealItemClass, sealStatusClass, formatIncrementalTime,

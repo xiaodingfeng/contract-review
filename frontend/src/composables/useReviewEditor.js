@@ -423,6 +423,22 @@ export function useReviewEditor(state, helpers) {
         await serverFallback(originalText, suggestedText, onSuccess, onFailure, item);
     };
 
+    const appendClauseInEditorFinal = async (title, content, onSuccess, onFailure) => {
+        try {
+            const response = await api.appendContractClause(contract.id, { title, content });
+            if (response.data?.editorConfig) contract.editorConfig = response.data.editorConfig;
+            const refreshed = await refreshEditorDocument();
+            onSuccess?.({ appended: true, refreshed, ...response.data });
+            ElMessage.success(refreshed
+                ? '新增条款已写入合同，并已刷新左侧文档。'
+                : '新增条款已写入合同，刷新页面后可查看。');
+        } catch (err) {
+            const msg = err.response?.data?.error || '新增条款失败。';
+            ElMessage.error(msg);
+            onFailure?.(msg);
+        }
+    };
+
     // --- Force save ---
     const forceSaveCurrentDocument = async (silent = true) => {
         if (!contract.id || forceSaveInFlight.value) return false;
@@ -500,7 +516,7 @@ export function useReviewEditor(state, helpers) {
         splitCandidateSentences, buildSuggestionCandidates, buildReplacementCandidates, findTextRangeByCandidates,
         ensureEditorReady, previewSuggestion, locateText, replaceTextOnServer,
         markAdoptedText, replaceTextInEditor, refreshEditorDocument, serverFallback,
-        replaceTextInEditorFinal,
+        replaceTextInEditorFinal, appendClauseInEditorFinal,
         forceSaveCurrentDocument, scheduleForceSave, stopAutoForceSave, startAutoForceSave,
         onDocumentStateChange, onDocumentReady,
     };

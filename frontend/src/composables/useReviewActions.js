@@ -11,9 +11,9 @@ export function useReviewActions(state, editor, helpers) {
     const {
         executeEditorMethod, ensureEditorReady, findTextRangeByCandidates,
         buildSuggestionCandidates, buildReplacementCandidates, replaceTextInEditorFinal, previewSuggestion,
-        scheduleForceSave,
+        appendClauseInEditorFinal, scheduleForceSave,
     } = editor;
-    const { suggestionOriginal, suggestionText, suggestionTitle } = helpers;
+    const { suggestionOriginal, suggestionText, suggestionTitle, isMissingClauseSuggestion } = helpers;
 
     const selectedSuggestionIndexes = ref([]);
     const batchApplying = ref(false);
@@ -45,30 +45,46 @@ export function useReviewActions(state, editor, helpers) {
         }
     };
 
-    const adoptSuggestion = (item) => {
+    const adoptSuggestion = async (item) => {
         const originalText = suggestionOriginal(item);
         const suggestedText = suggestionText(item);
 
-        if (!originalText || !suggestedText) {
-            ElMessage.warning('该建议缺少可自动替换的原文或建议文本，请手动修改。');
+        if (!suggestedText || (!originalText && !isMissingClauseSuggestion(item))) {
+            ElMessage.warning('该建议缺少可写入合同的建议文本，请手动修改。');
             return;
         }
 
-        previewSuggestion(item, '正在采纳');
-        replaceTextInEditorFinal(originalText, suggestedText, (result = {}) => {
+        const markAdopted = (result = {}) => {
             item.adopted = true;
-            item.adopted_original = originalText;
-            adoptedHighlights.value[suggestionTitle(item, 0)] = originalText;
-            if (result.fallback) {
+            item.adopted_original = originalText || '合同未约定';
+            adoptedHighlights.value[suggestionTitle(item, 0)] = originalText || suggestedText;
+            if (result.appended) {
+                selectedSuggestionPreview.value.status = result.refreshed ? '新增条款已写入左侧文档' : '新增条款已写入源文件';
+            } else if (result.fallback) {
                 selectedSuggestionPreview.value.status = '已写入源文件，当前页面未刷新';
                 ElMessage.success('建议已采纳，源文件已更新；当前页面未刷新。');
             } else {
                 selectedSuggestionPreview.value.status = '已实时更新到左侧文档';
                 ElMessage.success('建议已采纳，左侧文档已更新。');
             }
-        }, (status) => {
+        };
+        const markFailed = (status) => {
             selectedSuggestionPreview.value.status = status;
-        }, item);
+        };
+
+        if (isMissingClauseSuggestion(item)) {
+            previewSuggestion(item, '正在新增条款');
+            await appendClauseInEditorFinal(
+                suggestionTitle(item, 0),
+                suggestedText,
+                markAdopted,
+                markFailed,
+            );
+            return;
+        }
+
+        previewSuggestion(item, '正在采纳');
+        await replaceTextInEditorFinal(originalText, suggestedText, markAdopted, markFailed, item);
     };
 
     const downloadBlob = (blob, filename) => {
@@ -90,20 +106,54 @@ export function useReviewActions(state, editor, helpers) {
         }
         batchApplying.value = true;
         try {
-            const suggestions = indexes.map((index) => {
-                const item = reviewData.modification_suggestions[index];
-                return {
+            const selectedItems = indexes.map((index) => ({
+                index,
+                item: reviewData.modification_suggestions[index],
+            })).filter(({ item }) => item && !item.adopted);
+            const appendItems = selectedItems.filter(({ item }) => isMissingClauseSuggestion(item));
+            const replacementItems = selectedItems.filter(({ item }) => !isMissingClauseSuggestion(item));
+            let succeededCount = 0;
+            let failedCount = 0;
+            let totalReplacements = 0;
+
+            if (replacementItems.length) {
+                const suggestions = replacementItems.map(({ item }) => ({
+                    title: suggestionTitle(item, 0),
                     originalText: suggestionOriginal(item),
                     suggestedText: suggestionText(item),
                     originalCandidates: buildReplacementCandidates(suggestionOriginal(item), item),
-                };
-            });
-            const response = await api.batchReplaceContractText(contract.id, { suggestions });
-            if (response.data.editorConfig) contract.editorConfig = response.data.editorConfig;
-            indexes.forEach((index) => {
-                if (reviewData.modification_suggestions[index]) reviewData.modification_suggestions[index].adopted = true;
-            });
-            ElMessage.success(`批量采纳完成，成功替换 ${response.data.totalReplacements || 0} 处。`);
+                }));
+                const response = await api.batchReplaceContractText(contract.id, { suggestions });
+                if (response.data.editorConfig) contract.editorConfig = response.data.editorConfig;
+                totalReplacements += response.data.totalReplacements || 0;
+                succeededCount += response.data.succeededCount || 0;
+                failedCount += response.data.failedCount || 0;
+                (response.data.results || []).forEach((result) => {
+                    if (result.ok) replacementItems[result.index].item.adopted = true;
+                });
+            }
+
+            for (const { item } of appendItems) {
+                try {
+                    const response = await api.appendContractClause(contract.id, {
+                        title: suggestionTitle(item, 0),
+                        content: suggestionText(item),
+                    });
+                    if (response.data.editorConfig) contract.editorConfig = response.data.editorConfig;
+                    item.adopted = true;
+                    item.adopted_original = suggestionOriginal(item) || '合同未约定';
+                    succeededCount += 1;
+                } catch {
+                    failedCount += 1;
+                }
+            }
+
+            if (!selectedItems.length) {
+                ElMessage.info('所选建议均已采纳。');
+                return;
+            }
+
+            ElMessage.success(`批量采纳完成：成功 ${succeededCount} 项${totalReplacements ? `，替换 ${totalReplacements} 处` : ''}${failedCount ? `，失败 ${failedCount} 项` : ''}。`);
             await loadLatestDiff();
         } catch (error) {
             ElMessage.error(error.response?.data?.error || '批量采纳失败。');

@@ -64,6 +64,10 @@ export default {
         return apiClient.post(`/contracts/${contractId}/batch-replace-text`, payload);
     },
 
+    appendContractClause(contractId, payload) {
+        return apiClient.post(`/contracts/${contractId}/append-clause`, payload);
+    },
+
     getContractVersions(contractId) {
         return apiClient.get(`/contracts/${contractId}/versions`);
     },

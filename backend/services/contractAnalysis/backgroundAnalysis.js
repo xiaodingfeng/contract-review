@@ -178,7 +178,7 @@ ${relevantKnowledge.map((item, index) => `[${index + 1}] [${item.source_type}] $
   "compliance_findings": [{"issue_type":"范本差异/合规瑕疵/计算错误/文本错误","title":"待优化项标题","original_clause":"合同原文","basis":"知识库中的法规、案例、范本或审查要点","description":"问题及实务后果"}],
   "missing_clauses": [{"title":"缺失条款","description":"为什么缺失","suggested_clause":"可补充条款"}],
   "party_review": [{"title":"主体审查项","description":"审查结论","plain_language":"大白话说明"}],
-  "modification_suggestions": [{"issue_type":"范本差异/合规瑕疵/计算错误/文本错误","title":"建议标题","current_clause":"现状条款原文","basis":[{"source_type":"law/case/template/review_rule","title":"依据名称","clause":"条号或范本条款","content":"依据原文"}],"suggested_text":"可直接替换的完整条款","anchor_hint":"用于定位的短语"}],
+  "modification_suggestions": [{"issue_type":"范本差异/合规瑕疵/计算错误/文本错误","operation":"replace/append","title":"建议标题","current_clause":"现状条款原文；新增条款时填写合同未约定","basis":[{"source_type":"law/case/template/review_rule","title":"依据名称","clause":"条号或范本条款","content":"依据原文"}],"suggested_text":"可直接替换或新增的完整条款","anchor_hint":"用于定位的短语"}],
   "breach_cost_analysis": [{"scenario":"违约场景","legal_basis":"知识库依据","estimated_cost":"可由合同明确计算的成本"}],
   "text_errors": [{"original_clause":"原文","description":"上下文矛盾、文字、数值或定义问题","suggested_text":"修正文本"}],
   "calculation_errors": [{"table_name":"表格名称","item":"错误项","original_value":"原值或公式","calculated_value":"复算值","description":"计算说明"}]
@@ -189,6 +189,7 @@ ${relevantKnowledge.map((item, index) => `[${index + 1}] [${item.source_type}] $
 - 仅在检索结果中存在匹配范本或标准条款原文时输出 template_differences；没有范本依据时保持空数组，不得把通用经验冒充范本。
 - compliance_findings 和 modification_suggestions 的 issue_type 只能是“范本差异”“合规瑕疵”“计算错误”“文本错误”之一。
 - modification_suggestions 每一项必须包含 current_clause、basis 和 suggested_text；current_clause 必须尽量逐字摘录合同原文中的完整句子或段落。
+- 合同已有原文需要修改时 operation 必须为 replace；合同缺失条款需要新增时 operation 必须为 append，current_clause 填“合同未约定”，不得把缺失说明伪装成可替换的合同原文。
 - 必须逐条比对「法律与裁判依据」中每一条法律条文与合同对应条款，特别关注天数、期限、比例、金额、次数等强制性数字是否一致；合同条款与知识库依据不一致时，必须列入 compliance_findings 并给出对应的 modification_suggestions，不得遗漏。
 - 如果没有检索依据，不得编造法条或案例，只能说明"当前知识库未检索到直接依据"。
 - 不得调用或引用外部知识、模型记忆、未提供的境外法规、范本或案例。
@@ -275,7 +276,7 @@ ${clauseKnowledge.map((item, index) => `[${index + 1}] [${item.source_type}] ${i
   "compliance_findings": [{"issue_type":"范本差异/合规瑕疵/计算错误/文本错误","title":"待优化项标题","original_clause":"合同原文","basis":"知识库依据","description":"问题及实务后果"}],
   "missing_clauses": [{"title":"缺失条款","description":"为什么缺失","suggested_clause":"可补充条款"}],
   "party_review": [{"title":"主体审查项","description":"审查结论","plain_language":"大白话说明"}],
-  "modification_suggestions": [{"issue_type":"范本差异/合规瑕疵/计算错误/文本错误","title":"建议标题","current_clause":"现状条款原文","basis":[{"source_type":"law/case/template/review_rule","title":"依据名称","clause":"条号或范本条款","content":"依据原文"}],"suggested_text":"可直接替换的完整条款","anchor_hint":"用于定位的短语"}],
+  "modification_suggestions": [{"issue_type":"范本差异/合规瑕疵/计算错误/文本错误","operation":"replace/append","title":"建议标题","current_clause":"现状条款原文；新增条款时填写合同未约定","basis":[{"source_type":"law/case/template/review_rule","title":"依据名称","clause":"条号或范本条款","content":"依据原文"}],"suggested_text":"可直接替换或新增的完整条款","anchor_hint":"用于定位的短语"}],
   "breach_cost_analysis": [{"scenario":"违约场景","legal_basis":"知识库依据","estimated_cost":"可由合同明确计算的成本"}],
   "text_errors": [{"original_clause":"原文","description":"上下文矛盾、文字、数值或定义问题","suggested_text":"修正文本"}],
   "calculation_errors": [{"table_name":"表格名称","item":"错误项","original_value":"原值或公式","calculated_value":"复算值","description":"计算说明"}]
@@ -286,6 +287,7 @@ ${clauseKnowledge.map((item, index) => `[${index + 1}] [${item.source_type}] ${i
 - 仅在检索结果中存在范本或标准条款原文时输出 template_differences；没有依据时保持空数组。
 - compliance_findings 和 modification_suggestions 的 issue_type 只能是“范本差异”“合规瑕疵”“计算错误”“文本错误”之一。
 - modification_suggestions 每一项必须包含 current_clause、basis 和 suggested_text，current_clause 必须逐字摘录当前条款原文。
+- 合同已有原文需要修改时 operation 必须为 replace；合同缺失条款需要新增时 operation 必须为 append，current_clause 填“合同未约定”。
 - 必须逐条比对「法律与裁判依据」与当前条款，特别关注天数、期限、比例、金额、次数等强制性数字；不一致时必须列入 compliance_findings 并给出 modification_suggestions。
 - 如果没有检索依据，不得编造法条或案例，只能说明"当前知识库未检索到直接依据"。
 - 不得调用或引用外部知识、模型记忆、未提供的境外法规、范本或案例。
