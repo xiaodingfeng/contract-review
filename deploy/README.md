@@ -35,7 +35,7 @@ third command as a line such as `review:<hash>` in
 Set `APP_HOST` to the browser-visible service URL. Fill in the OpenAI-compatible
 `LLM_*` variables before expecting real AI review output. Set
 `ONLYOFFICE_PUBLIC_URL` to the browser-visible Document Server URL, normally
-`http://<server-ip>:8080/onlyoffice/`. The JWT secret is shared by the backend and
+`/onlyoffice/` so it follows whichever origin users opened. The JWT secret is shared by the backend and
 Document Server through the compose configuration.
 
 ## 3. Start and verify
