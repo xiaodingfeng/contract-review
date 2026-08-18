@@ -83,7 +83,7 @@ export function useReviewState({ isResetting }) {
         standard_comparison: [],
     });
 
-    const onlyOfficeUrl = import.meta.env.VITE_APP_ONLYOFFICE_URL;
+    const onlyOfficeUrl = import.meta.env.VITE_APP_ONLYOFFICE_URL || '/onlyoffice/';
 
     // --- Constants ---
     const progressStepLabels = {
