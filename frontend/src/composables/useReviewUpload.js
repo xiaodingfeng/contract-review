@@ -85,9 +85,9 @@ export function useReviewUpload(state, deps) {
         }
     };
 
-    const handleUploadError = () => {
+    const handleUploadError = (error) => {
         loading.value = false;
-        ElMessage.error('上传失败，请检查后端服务是否正常。');
+        ElMessage.error(error?.response?.data?.error || '上传失败，请检查后端服务是否正常。');
     };
 
     const validateContractFile = (file) => {
@@ -243,7 +243,7 @@ export function useReviewUpload(state, deps) {
             const res = await api.uploadContract(formData);
             handleUploadSuccess(res.data);
         } catch (err) {
-            handleUploadError();
+            handleUploadError(err);
         }
     };
 

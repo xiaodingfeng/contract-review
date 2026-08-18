@@ -49,16 +49,49 @@ services:
     networks:
       - app
 
+  onlyoffice:
+    image: onlyoffice/documentserver:9.3.1.2
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: "${ONLYOFFICE_JWT_SECRET:?ONLYOFFICE_JWT_SECRET must be set in deploy/poc.env}"
+      JWT_HEADER: Authorization
+      JWT_IN_BODY: "true"
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      ALLOW_META_IP_ADDRESS: "false"
+      USE_UNAUTHORIZED_STORAGE: "false"
+      EXAMPLE_ENABLED: "false"
+      NGINX_ACCESS_LOG: "false"
+    ports:
+      - "${ONLYOFFICE_PORT:-8081}:80"
+    shm_size: "1gb"
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_logs:/var/log/onlyoffice
+      - onlyoffice_lib:/var/lib/onlyoffice
+      - onlyoffice_db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    networks:
+      - app
+
   frontend:
     build:
       context: .
       dockerfile: deploy/Dockerfile.frontend
       args:
         VITE_APP_BACKEND_API_URL: ""
-        VITE_APP_ONLYOFFICE_URL: ""
+        VITE_APP_ONLYOFFICE_URL: "${ONLYOFFICE_PUBLIC_URL:?ONLYOFFICE_PUBLIC_URL must be set in deploy/poc.env}"
     restart: unless-stopped
     depends_on:
       backend:
+        condition: service_healthy
+      onlyoffice:
         condition: service_healthy
     ports:
       - "${APP_PORT:-8080}:80"
@@ -80,3 +113,7 @@ volumes:
   postgres_data:
   backend_uploads:
   backend_generated_files:
+  onlyoffice_data:
+  onlyoffice_logs:
+  onlyoffice_lib:
+  onlyoffice_db:

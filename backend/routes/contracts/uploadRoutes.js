@@ -63,7 +63,7 @@ module.exports = function (router) {
         if (!userId) return res.status(400).json({ error: 'User ID is required for upload.' });
 
         try {
-            const contractRecord = await db.transaction(async (trx) => {
+            const uploadResult = await db.transaction(async (trx) => {
                 const safeUserId = await ensureUploadUser(trx, userId);
                 const originalFilenameDecoded = iconv.decode(Buffer.from(req.file.originalname, 'binary'), 'utf-8');
                 const documentKey = uuidv4();
@@ -76,20 +76,31 @@ module.exports = function (router) {
                     status: 'Uploaded',
                 }).returning(['id', 'original_filename', 'document_key', 'storage_path', 'user_id']);
 
-                return newContract || await trx('contracts').where({ document_key: documentKey }).first();
+                const contractRecord = newContract || await trx('contracts').where({ document_key: documentKey }).first();
+                const ext = path.extname(contractRecord.storage_path).toLowerCase().replace('.', '');
+                // Build the editor configuration before the transaction commits. If the
+                // ONLYOFFICE/JWT configuration is incomplete, the contract row is rolled
+                // back instead of leaving an orphaned upload record.
+                return {
+                    contractRecord,
+                    editorConfig: buildOnlyOfficeConfig(contractRecord, ext),
+                };
             });
-            const ext = path.extname(contractRecord.storage_path).toLowerCase().replace('.', '');
             res.status(201).json({
                 message: '文件已上传，编辑器配置已生成。',
-                contractId: contractRecord.id,
-                editorConfig: buildOnlyOfficeConfig(contractRecord, ext),
+                contractId: uploadResult.contractRecord.id,
+                editorConfig: uploadResult.editorConfig,
             });
         } catch (error) {
             if (error.message === 'INVALID_USER_ID') {
                 return res.status(400).json({ error: 'Invalid user ID for upload.' });
             }
             console.error('[ERROR] Error processing upload for OnlyOffice:', error);
-            res.status(500).json({ error: 'Server error during file upload.' });
+            res.status(500).json({
+                error: error.message?.includes('secretOrPrivateKey')
+                    ? '在线文档服务配置不完整，请联系管理员检查 ONLYOFFICE JWT。'
+                    : 'Server error during file upload.',
+            });
         }
     });
 
