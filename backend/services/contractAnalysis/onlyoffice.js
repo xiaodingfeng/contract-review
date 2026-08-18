@@ -38,8 +38,9 @@ const normalizeOnlyOfficeDownloadUrl = (rawUrl) => {
     return internalBase.toString();
 };
 
-const buildOnlyOfficeConfig = (contractRecord, ext = 'docx') => {
+const buildOnlyOfficeConfig = (contractRecord, ext = 'docx', options = {}) => {
     const isPdf = ext === 'pdf';
+    const reviewMode = !isPdf && options.reviewMode === true;
     const fileUrl = `${BACKEND_URL_FOR_DOCKER}/api/uploads/${path.basename(contractRecord.storage_path)}`;
     const callbackUrl = `${BACKEND_URL_FOR_DOCKER}/api/contracts/save-callback`;
     const payload = {
@@ -84,6 +85,13 @@ const buildOnlyOfficeConfig = (contractRecord, ext = 'docx') => {
                 chat: false,
                 feedback: false,
                 goback: false,
+                review: {
+                    hideReviewDisplay: false,
+                    showReviewChanges: reviewMode,
+                    reviewDisplay: 'markup',
+                    trackChanges: reviewMode,
+                    hoverMode: false,
+                },
             },
         },
     };

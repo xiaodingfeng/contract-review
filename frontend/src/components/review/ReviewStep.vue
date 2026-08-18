@@ -10,9 +10,23 @@
             <p class="mt-0.5 text-xs text-text-light whitespace-nowrap">选中文本可进行专项审查</p>
           </div>
         </div>
-        <button @click="prepareFocusedReviewFromSelection" class="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark">
-          读取选中文本审查
-        </button>
+        <div class="flex-shrink-0 flex items-center gap-3">
+          <div class="apply-mode-switch" aria-label="AI 建议采纳方式">
+            <button
+              @click="reviewApplyMode = 'review'"
+              :class="reviewApplyMode === 'review' ? 'is-active' : ''"
+              title="生成可接受或拒绝的修订记录"
+            >审阅修订</button>
+            <button
+              @click="reviewApplyMode = 'edit'"
+              :class="reviewApplyMode === 'edit' ? 'is-active' : ''"
+              title="直接替换合同正文"
+            >直接编辑</button>
+          </div>
+          <button @click="prepareFocusedReviewFromSelection" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark">
+            读取选中文本审查
+          </button>
+        </div>
       </div>
       <DocumentEditor
         v-if="contract.editorConfig"
@@ -124,7 +138,7 @@ export default {
       contract, onlyOfficeUrl, onDocumentReady, onDocumentStateChange,
       docEditorComponent, selectedSuggestionPreview,
       prepareFocusedReviewFromSelection,
-      showPlainLanguage, exportReport, downloadPdfAnnotations,
+      showPlainLanguage, reviewApplyMode, exportReport, downloadPdfAnnotations,
       cameFromHistory, goBackToUpload, goBackSmart,
       activeAiTab, reviewData, isLawOutdated,
     } = review;
@@ -133,7 +147,7 @@ export default {
       contract, onlyOfficeUrl, onDocumentReady, onDocumentStateChange,
       docEditorComponent, selectedSuggestionPreview,
       prepareFocusedReviewFromSelection,
-      showPlainLanguage, exportReport, downloadPdfAnnotations,
+      showPlainLanguage, reviewApplyMode, exportReport, downloadPdfAnnotations,
       cameFromHistory, goBackToUpload, goBackSmart,
       activeAiTab, reviewData, isLawOutdated,
     };
@@ -144,6 +158,27 @@ export default {
 <style scoped>
 .document-context {
   flex: 0 0 148px;
+}
+
+.apply-mode-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid #cfded9;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.apply-mode-switch button {
+  padding: 4px 9px;
+  border-radius: 4px;
+  color: #687b77;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.apply-mode-switch button.is-active {
+  color: #fff;
+  background: #008f87;
 }
 
 @media (max-width: 1280px) {

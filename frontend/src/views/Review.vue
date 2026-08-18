@@ -73,7 +73,7 @@ export default {
     });
 
     const {
-      activeStep, perspective, activeAiTab, selectedTemplateId, saveState,
+      activeStep, perspective, activeAiTab, selectedTemplateId, reviewApplyMode, saveState,
       contract, preAnalysisData, reviewData, selectedReviewPoints, customPurposes,
       allSuggestedReviewPoints, allPotentialParties, allSuggestedCorePurposes,
       cameFromHistory, resetState, socket: socketRef,
@@ -83,7 +83,10 @@ export default {
     const { forceSaveCurrentDocument, stopAutoForceSave } = editor;
     const { stopStatusPolling, stopElapsedTimer } = analysis;
 
-    watch([activeStep, perspective, activeAiTab, selectedTemplateId], saveState);
+    watch([activeStep, perspective, activeAiTab, selectedTemplateId, reviewApplyMode], () => {
+      localStorage.setItem('contract_apply_mode', reviewApplyMode.value);
+      saveState();
+    });
     watch([
       contract, preAnalysisData, reviewData, selectedReviewPoints, customPurposes,
       allSuggestedReviewPoints, allPotentialParties, allSuggestedCorePurposes,

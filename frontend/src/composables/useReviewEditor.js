@@ -122,12 +122,18 @@ export function useReviewEditor(state, helpers) {
         .map((item) => item.trim())
         .filter((item) => item.length >= 6);
 
+    const clauseBodyCandidate = (text) => {
+        const match = String(text || '').trim().match(/^\d+(?:\.\d+)+\s*(.+)$/s);
+        return match?.[1]?.trim() || '';
+    };
+
     const buildSuggestionCandidates = (originalText, item = {}) => {
         const candidates = [
             originalText,
             item.anchor_hint,
             item.original_clause,
             item.clause,
+            clauseBodyCandidate(originalText),
             ...splitCandidateSentences(originalText),
         ];
         const compact = normalizeCandidate(originalText);
@@ -155,6 +161,7 @@ export function useReviewEditor(state, helpers) {
             item.original_clause,
             item.current_clause,
             item.contract_clause,
+            clauseBodyCandidate(originalText),
         ];
         const seen = new Set();
         return candidates
@@ -213,13 +220,17 @@ export function useReviewEditor(state, helpers) {
         }
     };
 
-    const replaceTextOnServer = async (originalText, suggestedText, item = {}) => {
+    const replaceTextOnServer = async (originalText, suggestedText, item = {}, options = {}) => {
         const response = await api.replaceContractText(contract.id, {
             originalText,
             suggestedText,
             originalCandidates: buildReplacementCandidates(originalText, item),
+            mode: options.mode === 'review' ? 'review' : 'edit',
+            suggestionIndex: options.suggestionIndex,
+            expectedDocumentKey: contract.editorConfig?.document?.key,
         });
-        return response.data.replacements || 0;
+        if (response.data?.editorConfig) contract.editorConfig = response.data.editorConfig;
+        return response.data;
     };
 
     const markAdoptedText = async (originalText, suggestedText) => {
@@ -329,112 +340,34 @@ export function useReviewEditor(state, helpers) {
         }
     };
 
-    const replaceTextInEditorFinal = async (originalText, suggestedText, onSuccess, onFailure, item = {}) => {
-        if (!ensureEditorReady()) {
-            await serverFallback(originalText, suggestedText, onSuccess, onFailure, item);
-            return;
-        }
-
-        let success = false;
-        const editor = getEditor();
-
+    const replaceTextInEditorFinal = async (originalText, suggestedText, onSuccess, onFailure, item = {}, options = {}) => {
         try {
-            const canUseLiveApi = typeof editor?.executeMethod === 'function'
-                || typeof editor?.createConnector === 'function'
-                || Boolean(window.Asc?.plugin?.callCommand)
-                || Boolean(getCommunityEditor());
-            if (!canUseLiveApi) {
-                await serverFallback(originalText, suggestedText, onSuccess, onFailure, item);
-                return;
-            }
-
-            const matched = await findTextRangeByCandidates(buildReplacementCandidates(originalText, item));
-            if (matched?.range) {
-                await executeEditorMethod('SelectRange', [matched.range]);
-            }
-
-            if (matched?.range && typeof editor?.createConnector === 'function') {
-                const connector = editor.createConnector();
-                if (connector?.callCommand) {
-                    const asc = window.Asc || (window.Asc = {});
-                    asc.scope = asc.scope || {};
-                    asc.scope.suggestedText = suggestedText;
-                    await new Promise((resolve) => {
-                        connector.callCommand(function() {
-                            try {
-                                const oDocument = Api.GetDocument();
-                                const oRange = oDocument.GetRangeBySelect?.() || null;
-                                if (oRange) oRange.Delete();
-                                const oParagraph = Api.CreateParagraph();
-                                oParagraph.AddText(Asc.scope.suggestedText);
-                                oDocument.InsertContent([oParagraph], false, { KeepTextOnly: false });
-                            } catch (e) {}
-                        }, true);
-                        setTimeout(resolve, 800);
-                    });
-                    success = true;
-                }
-            }
-
-            if (!success && matched?.range && window.Asc?.plugin?.callCommand) {
-                window.Asc.scope = window.Asc.scope || {};
-                window.Asc.scope.suggestedText = suggestedText;
-                await new Promise((resolve) => {
-                    window.Asc.plugin.callCommand(function() {
-                        try {
-                            const oDocument = Api.GetDocument();
-                            const oRange = oDocument.GetRangeBySelect?.() || null;
-                            if (oRange) oRange.Delete();
-                            const oParagraph = Api.CreateParagraph();
-                            oParagraph.AddText(Asc.scope.suggestedText);
-                            oDocument.InsertContent([oParagraph], false, { KeepTextOnly: false });
-                        } catch (e) {}
-                    }, true);
-                    setTimeout(resolve, 800);
-                });
-                success = true;
-            }
-
-            if (!success && matched?.range) {
-                await executeEditorMethod('SelectRange', [matched.range]);
-                try {
-                    await executeEditorMethod('PasteText', [suggestedText]);
-                    success = true;
-                } catch {}
-                if (!success) {
-                    try {
-                        await executeEditorMethod('ReplaceText', [matched.range, suggestedText]);
-                        success = true;
-                    } catch {}
-                }
-            }
-
-            if (success) {
-                await markAdoptedText(originalText, suggestedText);
-                scheduleForceSave(500);
-                onSuccess?.({ realTime: true });
-                ElMessage.success('建议已实时采纳并更新到文档');
-                return;
-            }
+            await forceSaveCurrentDocument(true);
+            await new Promise((resolve) => setTimeout(resolve, 650));
+            const result = await replaceTextOnServer(originalText, suggestedText, item, options);
+            onSuccess?.(result);
         } catch (error) {
-            console.warn('实时替换失败，进入服务器兜底', error);
+            const message = error.response?.data?.error || '替换失败，文档未发生变化。';
+            ElMessage.error(message);
+            onFailure?.(message);
         }
-
-        await serverFallback(originalText, suggestedText, onSuccess, onFailure, item);
     };
 
-    const appendClauseInEditorFinal = async (title, content, onSuccess, onFailure) => {
+    const appendClauseInEditorFinal = async (title, content, onSuccess, onFailure, options = {}) => {
         try {
-            const response = await api.appendContractClause(contract.id, { title, content });
+            await forceSaveCurrentDocument(true);
+            await new Promise((resolve) => setTimeout(resolve, 650));
+            const response = await api.appendContractClause(contract.id, {
+                title,
+                content,
+                mode: options.mode === 'review' ? 'review' : 'edit',
+                suggestionIndex: options.suggestionIndex,
+                expectedDocumentKey: contract.editorConfig?.document?.key,
+            });
             if (response.data?.editorConfig) contract.editorConfig = response.data.editorConfig;
-            const refreshed = await refreshEditorDocument();
-            onSuccess?.({ appended: true, refreshed, ...response.data });
+            onSuccess?.({ appended: true, ...response.data });
             if (response.data?.alreadyPresent) {
                 ElMessage.info('该条款已存在于合同中，未重复追加。');
-            } else {
-                ElMessage.success(refreshed
-                    ? '新增条款已写入合同，并已刷新左侧文档。'
-                    : '新增条款已写入合同，刷新页面后可查看。');
             }
         } catch (err) {
             const msg = err.response?.data?.error || '新增条款失败。';
@@ -517,7 +450,7 @@ export function useReviewEditor(state, helpers) {
     return {
         forceSaveTimer, forceSaveDebounceTimer, forceSaveInFlight, hasPendingEditorChanges,
         getEditor, getCommunityEditor, executeEditorMethod, findTextRange, normalizeCandidate,
-        splitCandidateSentences, buildSuggestionCandidates, buildReplacementCandidates, findTextRangeByCandidates,
+        splitCandidateSentences, clauseBodyCandidate, buildSuggestionCandidates, buildReplacementCandidates, findTextRangeByCandidates,
         ensureEditorReady, previewSuggestion, locateText, replaceTextOnServer,
         markAdoptedText, replaceTextInEditor, refreshEditorDocument, serverFallback,
         replaceTextInEditorFinal, appendClauseInEditorFinal,

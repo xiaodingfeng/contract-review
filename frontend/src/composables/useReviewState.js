@@ -14,6 +14,8 @@ export function useReviewState({ isResetting }) {
     const isEditorReady = ref(false);
     const reAnalyzing = ref(false);
     const showPlainLanguage = ref(false);
+    const storedApplyMode = localStorage.getItem('contract_apply_mode');
+    const reviewApplyMode = ref(storedApplyMode === 'edit' ? 'edit' : 'review');
     const socket = ref(null);
 
     const analysisProgress = ref([]);
@@ -245,6 +247,7 @@ export function useReviewState({ isResetting }) {
             allPotentialParties: allPotentialParties.value,
             allSuggestedCorePurposes: allSuggestedCorePurposes.value,
             selectedTemplateId: selectedTemplateId.value,
+            reviewApplyMode: reviewApplyMode.value,
         };
         if (stateToSave.contract && stateToSave.contract.id) {
             localStorage.setItem('review_session', JSON.stringify(stateToSave));
@@ -301,7 +304,7 @@ export function useReviewState({ isResetting }) {
     return {
         activeStep, cameFromHistory, loading, loadingMessage, sessionLoadFailed,
         perspective, activeAiTab, docEditorComponent, isEditorReady, reAnalyzing,
-        showPlainLanguage, socket,
+        showPlainLanguage, reviewApplyMode, socket,
         analysisProgress, clauseProgress, analysisPercent, analysisEta, analysisElapsed,
         analysisJobId, analysisSteps, statusPollTimer, elapsedTimer, analysisActive,
         selectedSuggestionPreview, adoptedHighlights,

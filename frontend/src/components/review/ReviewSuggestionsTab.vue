@@ -12,7 +12,7 @@
       <div class="flex items-center gap-2">
         <span v-if="isPdfContract" class="text-xs text-amber-600">PDF 不支持采纳</span>
         <button @click="applySelectedSuggestions" :disabled="batchApplying || isPdfContract || selectedSuggestionIndexes.length === 0" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed">
-          {{ batchApplying ? '批量采纳中...' : '一键采纳所选' }}
+          {{ batchApplying ? '批量处理中...' : (reviewApplyMode === 'review' ? '加入审阅修订' : '直接编辑所选') }}
         </button>
       </div>
     </div>
@@ -91,9 +91,15 @@
           <button @click="previewSuggestion(item)" class="mr-2 px-3 py-1.5 text-xs font-medium text-primary bg-white border border-primary rounded hover:bg-primary-light transition-colors">
             {{ item._showPreview ? '收起变更' : '查看变更' }}
           </button>
-          <button @click="adoptSuggestion(item)" :disabled="isPdfContract || item.adopted" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+          <button @click="adoptSuggestion(item, index)" :disabled="isPdfContract || isSuggestionApplied(item)" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-            {{ item.adopted ? '已采纳' : (isMissingClauseSuggestion(item) ? '新增至合同' : '一键采纳建议') }}
+            {{ item.application_status === 'pending_review'
+              ? '已加入修订'
+              : (item.adopted
+                ? '已采纳'
+                : (isMissingClauseSuggestion(item)
+                  ? (reviewApplyMode === 'review' ? '新增修订' : '新增至合同')
+                  : (reviewApplyMode === 'review' ? '加入审阅修订' : '直接编辑'))) }}
           </button>
         </div>
         <div v-if="item._showPreview" class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-3 text-xs">
@@ -158,18 +164,18 @@ export default {
   setup() {
     const review = inject('review');
     const {
-      reviewData, showPlainLanguage, isPdfContract,
+      reviewData, showPlainLanguage, reviewApplyMode, isPdfContract,
       selectedSuggestionIndexes, batchApplying,
       suggestionTitle, suggestionOriginal, suggestionText, suggestionReason, suggestionCitations, isMissingClauseSuggestion,
       locateText, addDocComment, previewSuggestion, adoptSuggestion,
-      applySelectedSuggestions, toggleNegotiation, adoptFallbackOption,
+      applySelectedSuggestions, isSuggestionApplied, toggleNegotiation, adoptFallbackOption,
     } = review;
     return {
-      reviewData, showPlainLanguage, isPdfContract,
+      reviewData, showPlainLanguage, reviewApplyMode, isPdfContract,
       selectedSuggestionIndexes, batchApplying,
       suggestionTitle, suggestionOriginal, suggestionText, suggestionReason, suggestionCitations, isMissingClauseSuggestion,
       locateText, addDocComment, previewSuggestion, adoptSuggestion,
-      applySelectedSuggestions, toggleNegotiation, adoptFallbackOption,
+      applySelectedSuggestions, isSuggestionApplied, toggleNegotiation, adoptFallbackOption,
     };
   },
 };

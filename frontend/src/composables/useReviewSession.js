@@ -8,7 +8,7 @@ export function useReviewSession(state, deps) {
         contract, perspective, preAnalysisData, reviewData,
         activeAiTab, cameFromHistory, selectedTemplateId,
         allSuggestedReviewPoints, allPotentialParties, allSuggestedCorePurposes,
-        selectedReviewPoints, customPurposes,
+        selectedReviewPoints, customPurposes, reviewApplyMode,
         saveState, resetState,
     } = state;
     const {
@@ -61,6 +61,10 @@ export function useReviewSession(state, deps) {
 
         activeStep.value = savedState.activeStep;
         activeAiTab.value = savedState.activeAiTab || 'suggestions';
+        if (savedState.reviewApplyMode === 'edit' || savedState.reviewApplyMode === 'review') {
+            reviewApplyMode.value = savedState.reviewApplyMode;
+            localStorage.setItem('contract_apply_mode', reviewApplyMode.value);
+        }
         if (!['summary', 'suggestions', 'knowledge', 'workspace'].includes(activeAiTab.value)) {
             activeAiTab.value = 'summary';
         }

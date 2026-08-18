@@ -6,12 +6,12 @@ import api from '../api';
 export function useReviewActions(state, editor, helpers) {
     const {
         contract, reviewData, activeAiTab, adoptedHighlights,
-        selectedSuggestionPreview,
+        selectedSuggestionPreview, reviewApplyMode,
     } = state;
     const {
         executeEditorMethod, ensureEditorReady, findTextRangeByCandidates,
         buildSuggestionCandidates, buildReplacementCandidates, replaceTextInEditorFinal, previewSuggestion,
-        appendClauseInEditorFinal, scheduleForceSave,
+        appendClauseInEditorFinal, scheduleForceSave, forceSaveCurrentDocument,
     } = editor;
     const { suggestionOriginal, suggestionText, suggestionTitle, isMissingClauseSuggestion } = helpers;
 
@@ -45,7 +45,25 @@ export function useReviewActions(state, editor, helpers) {
         }
     };
 
-    const adoptSuggestion = async (item) => {
+    const isSuggestionApplied = (item) => item?.adopted || item?.application_status === 'pending_review';
+
+    const applyResultToSuggestion = (item, originalText, suggestedText, result = {}) => {
+        const pendingReview = result.applicationStatus === 'pending_review' || reviewApplyMode.value === 'review';
+        item.application_status = pendingReview ? 'pending_review' : 'applied';
+        item.review_pending = pendingReview;
+        item.adopted = !pendingReview;
+        item.adopted_original = originalText || '合同未约定';
+        adoptedHighlights.value[suggestionTitle(item, 0)] = originalText || suggestedText;
+        if (!selectedSuggestionPreview.value) {
+            selectedSuggestionPreview.value = { before: originalText || '合同未约定', after: suggestedText, status: '' };
+        }
+        selectedSuggestionPreview.value.status = pendingReview
+            ? '已加入审阅修订，可在左侧接受或拒绝'
+            : '已直接写入左侧文档';
+        ElMessage.success(pendingReview ? '已加入审阅修订。' : '建议已直接写入合同。');
+    };
+
+    const adoptSuggestion = async (item, suggestionIndex) => {
         const originalText = suggestionOriginal(item);
         const suggestedText = suggestionText(item);
 
@@ -54,20 +72,7 @@ export function useReviewActions(state, editor, helpers) {
             return;
         }
 
-        const markAdopted = (result = {}) => {
-            item.adopted = true;
-            item.adopted_original = originalText || '合同未约定';
-            adoptedHighlights.value[suggestionTitle(item, 0)] = originalText || suggestedText;
-            if (result.appended) {
-                selectedSuggestionPreview.value.status = result.refreshed ? '新增条款已写入左侧文档' : '新增条款已写入源文件';
-            } else if (result.fallback) {
-                selectedSuggestionPreview.value.status = '已写入源文件，当前页面未刷新';
-                ElMessage.success('建议已采纳，源文件已更新；当前页面未刷新。');
-            } else {
-                selectedSuggestionPreview.value.status = '已实时更新到左侧文档';
-                ElMessage.success('建议已采纳，左侧文档已更新。');
-            }
-        };
+        const markAdopted = (result = {}) => applyResultToSuggestion(item, originalText, suggestedText, result);
         const markFailed = (status) => {
             selectedSuggestionPreview.value.status = status;
         };
@@ -79,12 +84,16 @@ export function useReviewActions(state, editor, helpers) {
                 suggestedText,
                 markAdopted,
                 markFailed,
+                { mode: reviewApplyMode.value, suggestionIndex },
             );
             return;
         }
 
         previewSuggestion(item, '正在采纳');
-        await replaceTextInEditorFinal(originalText, suggestedText, markAdopted, markFailed, item);
+        await replaceTextInEditorFinal(originalText, suggestedText, markAdopted, markFailed, item, {
+            mode: reviewApplyMode.value,
+            suggestionIndex,
+        });
     };
 
     const downloadBlob = (blob, filename) => {
@@ -109,7 +118,7 @@ export function useReviewActions(state, editor, helpers) {
             const selectedItems = indexes.map((index) => ({
                 index,
                 item: reviewData.modification_suggestions[index],
-            })).filter(({ item }) => item && !item.adopted);
+            })).filter(({ item }) => item && !isSuggestionApplied(item));
             const appendItems = selectedItems.filter(({ item }) => isMissingClauseSuggestion(item));
             const replacementItems = selectedItems.filter(({ item }) => !isMissingClauseSuggestion(item));
             let succeededCount = 0;
@@ -117,31 +126,45 @@ export function useReviewActions(state, editor, helpers) {
             let totalReplacements = 0;
 
             if (replacementItems.length) {
-                const suggestions = replacementItems.map(({ item }) => ({
+                await forceSaveCurrentDocument(true);
+                await new Promise((resolve) => setTimeout(resolve, 650));
+                const suggestions = replacementItems.map(({ item, index }) => ({
+                    suggestionIndex: index,
                     title: suggestionTitle(item, 0),
                     originalText: suggestionOriginal(item),
                     suggestedText: suggestionText(item),
                     originalCandidates: buildReplacementCandidates(suggestionOriginal(item), item),
                 }));
-                const response = await api.batchReplaceContractText(contract.id, { suggestions });
+                const response = await api.batchReplaceContractText(contract.id, {
+                    suggestions,
+                    mode: reviewApplyMode.value,
+                    expectedDocumentKey: contract.editorConfig?.document?.key,
+                });
                 if (response.data.editorConfig) contract.editorConfig = response.data.editorConfig;
                 totalReplacements += response.data.totalReplacements || 0;
                 succeededCount += response.data.succeededCount || 0;
                 failedCount += response.data.failedCount || 0;
                 (response.data.results || []).forEach((result) => {
-                    if (result.ok) replacementItems[result.index].item.adopted = true;
+                    if (result.ok) {
+                        const target = replacementItems[result.index].item;
+                        applyResultToSuggestion(target, suggestionOriginal(target), suggestionText(target), response.data);
+                    }
                 });
             }
 
-            for (const { item } of appendItems) {
+            for (const { item, index } of appendItems) {
                 try {
+                    await forceSaveCurrentDocument(true);
+                    await new Promise((resolve) => setTimeout(resolve, 650));
                     const response = await api.appendContractClause(contract.id, {
                         title: suggestionTitle(item, 0),
                         content: suggestionText(item),
+                        mode: reviewApplyMode.value,
+                        suggestionIndex: index,
+                        expectedDocumentKey: contract.editorConfig?.document?.key,
                     });
                     if (response.data.editorConfig) contract.editorConfig = response.data.editorConfig;
-                    item.adopted = true;
-                    item.adopted_original = suggestionOriginal(item) || '合同未约定';
+                    applyResultToSuggestion(item, suggestionOriginal(item), suggestionText(item), response.data);
                     succeededCount += 1;
                 } catch {
                     failedCount += 1;
@@ -149,11 +172,11 @@ export function useReviewActions(state, editor, helpers) {
             }
 
             if (!selectedItems.length) {
-                ElMessage.info('所选建议均已采纳。');
+                ElMessage.info('所选建议均已处理。');
                 return;
             }
 
-            ElMessage.success(`批量采纳完成：成功 ${succeededCount} 项${totalReplacements ? `，替换 ${totalReplacements} 处` : ''}${failedCount ? `，失败 ${failedCount} 项` : ''}。`);
+            ElMessage.success(`批量处理完成：成功 ${succeededCount} 项${totalReplacements ? `，替换 ${totalReplacements} 处` : ''}${failedCount ? `，失败 ${failedCount} 项` : ''}。`);
             await loadLatestDiff();
         } catch (error) {
             ElMessage.error(error.response?.data?.error || '批量采纳失败。');
@@ -196,7 +219,7 @@ export function useReviewActions(state, editor, helpers) {
 
     return {
         selectedSuggestionIndexes, batchApplying, diffItems, diffLoading,
-        addDocComment, adoptSuggestion, downloadBlob,
+        addDocComment, adoptSuggestion, isSuggestionApplied, downloadBlob,
         applySelectedSuggestions, loadLatestDiff, exportReport, downloadPdfAnnotations,
     };
 }
