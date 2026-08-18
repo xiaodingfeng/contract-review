@@ -184,8 +184,15 @@ module.exports = function (router) {
             ).join('');
             const insertXml = `${titlePara}${contentParas}`;
 
-            // 在 </w:body> 前插入新段落
-            documentXml = documentXml.replace('</w:body>', `${insertXml}</w:body>`);
+            // Word 要求 body 级 sectPr 保持为最后一个子节点；存在时必须插在它之前。
+            const finalSectionIndex = documentXml.lastIndexOf('<w:sectPr');
+            if (finalSectionIndex >= 0) {
+                documentXml = `${documentXml.slice(0, finalSectionIndex)}${insertXml}${documentXml.slice(finalSectionIndex)}`;
+            } else if (documentXml.includes('</w:body>')) {
+                documentXml = documentXml.replace('</w:body>', `${insertXml}</w:body>`);
+            } else {
+                return res.status(500).json({ error: 'DOCX 文件结构异常，无法定位条款插入位置。' });
+            }
             zip.updateFile('word/document.xml', Buffer.from(documentXml, 'utf8'));
             zip.writeZip(contract.storage_path);
 
