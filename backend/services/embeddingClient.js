@@ -21,14 +21,21 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-const EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL || process.env.LLM_BASE_URL;
-const EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || process.env.LLM_API_KEY;
+// 向量/重排服务必须显式配置。聊天模型地址并不必然提供 /embeddings 或 /rerank，
+// 直接继承 LLM_BASE_URL 会在 DeepSeek 等聊天服务上制造大量 404 请求。
+const EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL || '';
+const EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || (EMBEDDING_BASE_URL ? process.env.LLM_API_KEY : '');
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || 'BAAI/bge-m3';
 const RERANK_BASE_URL = process.env.RERANK_BASE_URL || EMBEDDING_BASE_URL;
 const RERANK_API_KEY = process.env.RERANK_API_KEY || EMBEDDING_API_KEY;
 const RERANK_MODEL = process.env.RERANK_MODEL || 'BAAI/bge-reranker-v2-m3';
 const EMBEDDING_DIM = Number(process.env.EMBEDDING_DIM || 1024);
 const EMBEDDING_BATCH_SIZE = Math.max(1, Number(process.env.EMBEDDING_BATCH_SIZE || 32));
+const PROVIDER_BACKOFF_MS = Math.max(1000, Number(process.env.EMBEDDING_PROVIDER_BACKOFF_MS || 300000));
+let embeddingUnavailableUntil = 0;
+let rerankUnavailableUntil = 0;
+let embeddingFallbackLogged = false;
+let rerankFallbackLogged = false;
 
 const hashFallbackEmbedding = (text) => {
     const vector = new Array(EMBEDDING_DIM).fill(0);
@@ -60,7 +67,14 @@ const embedTexts = async (texts) => {
     }
 
     if (!EMBEDDING_BASE_URL || !EMBEDDING_API_KEY) {
-        console.warn('[Embedding] EMBEDDING_BASE_URL/API_KEY missing. Falling back to local hash vectors.');
+        if (!embeddingFallbackLogged) {
+            console.warn('[Embedding] EMBEDDING_BASE_URL/API_KEY missing. Falling back to local hash vectors.');
+            embeddingFallbackLogged = true;
+        }
+        return input.map(hashFallbackEmbedding);
+    }
+
+    if (Date.now() < embeddingUnavailableUntil) {
         return input.map(hashFallbackEmbedding);
     }
 
@@ -78,7 +92,8 @@ const embedTexts = async (texts) => {
         const detail = respData
             ? (typeof respData === 'string' ? respData.substring(0, 200) : JSON.stringify(respData).substring(0, 200))
             : '';
-        console.warn(`[Embedding] Online embedding failed: ${error.message}${status ? ` (HTTP ${status})` : ''}${detail ? ` Response: ${detail}` : ''}. Falling back to local hash vectors.`);
+        embeddingUnavailableUntil = Date.now() + PROVIDER_BACKOFF_MS;
+        console.warn(`[Embedding] Online embedding failed: ${error.message}${status ? ` (HTTP ${status})` : ''}${detail ? ` Response: ${detail}` : ''}. Falling back to local hash vectors for ${Math.round(PROVIDER_BACKOFF_MS / 1000)}s.`);
         return input.map(hashFallbackEmbedding);
     }
 };
@@ -95,6 +110,7 @@ const ensureEmbeddingReady = async () => {
 
 const rerankDocuments = async (query, documents, topN) => {
     if (!documents.length || !RERANK_BASE_URL || !RERANK_API_KEY) return documents.slice(0, topN || documents.length);
+    if (Date.now() < rerankUnavailableUntil) return documents.slice(0, topN || documents.length);
 
     try {
         const response = await axios.post(
@@ -118,7 +134,11 @@ const rerankDocuments = async (query, documents, topN) => {
             })
             .filter(Boolean);
     } catch (error) {
-        console.warn(`[Rerank] Online rerank failed: ${error.message}. Using vector scores only.`);
+        rerankUnavailableUntil = Date.now() + PROVIDER_BACKOFF_MS;
+        if (!rerankFallbackLogged || error.response?.status !== 404) {
+            console.warn(`[Rerank] Online rerank failed: ${error.message}. Using vector scores only for ${Math.round(PROVIDER_BACKOFF_MS / 1000)}s.`);
+            rerankFallbackLogged = true;
+        }
         return documents.slice(0, topN || documents.length);
     }
 };

@@ -78,8 +78,14 @@ const updateAnalysisJob = (contractId, updates) => {
 const emitAnalysisProgress = async (reqOrIo, contractId, payload) => {
     const stepKey = payload.step;
     const status = payload.status;
-    const { percent, stepIndex, totalSteps } = getStepProgress(stepKey, status);
     const job = analysisJobs.get(Number(contractId));
+    const calculatedProgress = getStepProgress(stepKey, status);
+    // “failed”不是流程步骤：失败时保留最后进度，避免客户端从当前进度突然跳回 0%。
+    const percent = stepKey === 'failed' ? (job?.percent || 0) : calculatedProgress.percent;
+    const stepIndex = stepKey === 'failed'
+        ? Math.max(0, ANALYSIS_STEPS.findIndex((s) => s.key === job?.currentStep))
+        : calculatedProgress.stepIndex;
+    const totalSteps = calculatedProgress.totalSteps;
     // 长合同分层审查时，job 上会设置 totalEstSeconds（基础 60 + 条款数 × 10），用于动态 ETA
     const totalEstSeconds = job?.totalEstSeconds || TOTAL_EST_SECONDS;
 

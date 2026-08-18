@@ -21,6 +21,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../../database');
 const { EMBEDDING_DIM, embedText, ensureEmbeddingReady, rerankDocuments } = require('../embeddingClient');
+const { createSemaphore } = require('../../utils/semaphore');
 const { parseLegalMarkdownFile } = require('../legalMarkdownParser');
 const { parseCaseJsonDocument } = require('../caseJsonParser');
 
@@ -321,7 +322,11 @@ const syncAllVectorDocuments = async (onProgress) => {
     return { synced, total, vectorStore: state.milvusReady ? 'milvus' : 'relational-fallback' };
 };
 
-const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], rerank = true, includeHistorical = false } = {}) => {
+// 所有请求共享同一并发阈值，避免多通道检索或多人同时审查耗尽 Knex 连接池。
+// 默认 4，小于生产默认连接池 10，给状态写入、知识库管理和其他接口预留连接。
+const vectorSearchSemaphore = createSemaphore(process.env.VECTOR_SEARCH_CONCURRENCY || 4);
+
+const searchVectorDocumentsUnbounded = async (query, { limit = 5, sourceTypes = [], rerank = true, includeHistorical = false } = {}) => {
     await ensureVectorStore();
     const cleanQuery = normalizeText(query);
     const queryVector = await embedText(cleanQuery);
@@ -341,6 +346,10 @@ const searchVectorDocuments = async (query, { limit = 5, sourceTypes = [], reran
     const reranked = rerank ? await rerankDocuments(cleanQuery, results, limit) : results.slice(0, limit);
     return reranked.slice(0, limit);
 };
+
+const searchVectorDocuments = (query, options = {}) => (
+    vectorSearchSemaphore.run(() => searchVectorDocumentsUnbounded(query, options))
+);
 
 // 知识库检索 rerank 阈值：只对 rerank_score 生效；rerank 不可用时（无 rerank_score）不过滤
 // 设为 0 可关闭阈值过滤；未配置环境变量时默认 0.6
