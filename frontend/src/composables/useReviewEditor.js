@@ -14,10 +14,73 @@ export function useReviewEditor(state, helpers) {
 
     const getEditor = () => window?.DocEditor?.instances?.docEditorComponent || null;
 
+    // ONLYOFFICE Community does not expose the paid Automation API connector on
+    // the host DocEditor instance. The editor is proxied on the same origin in
+    // this POC, so the document frame's plugin-compatible methods are available
+    // as a fallback for search, comments, selected text and format-safe replace.
+    const getCommunityEditor = () => {
+        try {
+            const frameWindow = document.querySelector('iframe[name="frameEditor"]')?.contentWindow;
+            return frameWindow?.editor || frameWindow?.Asc?.editor || null;
+        } catch {
+            return null;
+        }
+    };
+
+    const executeCommunityEditorMethod = (method, args = []) => {
+        const editor = getCommunityEditor();
+        if (!editor) throw new Error('EDITOR_NOT_READY');
+
+        if (method === 'Search' && typeof editor.pluginMethod_SearchNext === 'function') {
+            const text = String(args[0] || '').trim();
+            if (!text) return [];
+            const found = editor.pluginMethod_SearchNext({ searchString: text, matchCase: false }, true);
+            return found ? [{ __communitySelection: true, text }] : [];
+        }
+
+        if (method === 'SelectRange' && args[0]?.__communitySelection) {
+            // SearchNext already selects and scrolls the matching text.
+            return true;
+        }
+
+        if (method === 'GetSelectedText' && typeof editor.pluginMethod_GetSelectedText === 'function') {
+            return editor.pluginMethod_GetSelectedText({ Numbering: true, ParaSeparator: '\n' });
+        }
+
+        if (method === 'AddComment' && typeof editor.pluginMethod_AddComment === 'function') {
+            const commentText = String(args[0] || 'AI 审查建议');
+            const author = String(args[1] || 'AI 审查专家');
+            return editor.pluginMethod_AddComment({
+                Text: commentText,
+                UserName: author,
+                Time: String(Date.now()),
+                Solved: false,
+            });
+        }
+
+        if ((method === 'PasteText' || method === 'ReplaceText')
+            && typeof editor.pluginMethod_ReplaceTextSmart === 'function') {
+            const replacement = String(method === 'ReplaceText' ? args[1] : args[0] || '');
+            const result = editor.pluginMethod_ReplaceTextSmart(
+                replacement.split(/\r?\n/),
+                '\t',
+                '\r\n',
+            );
+            if (result === false) throw new Error('EDITOR_SMART_REPLACE_FAILED');
+            return new Promise((resolve) => setTimeout(() => resolve(result), 450));
+        }
+
+        throw new Error(`EDITOR_METHOD_UNAVAILABLE:${method}`);
+    };
+
     const executeEditorMethod = (method, args = []) => {
         const editor = getEditor();
         if (!editor || typeof editor.executeMethod !== 'function') {
-            return Promise.reject(new Error('EDITOR_NOT_READY'));
+            try {
+                return Promise.resolve(executeCommunityEditorMethod(method, args));
+            } catch (error) {
+                return Promise.reject(error);
+            }
         }
         return new Promise((resolve, reject) => {
             let settled = false;
@@ -85,6 +148,26 @@ export function useReviewEditor(state, helpers) {
             });
     };
 
+    const buildReplacementCandidates = (originalText, item = {}) => {
+        const candidates = [
+            originalText,
+            item.original_text,
+            item.original_clause,
+            item.current_clause,
+            item.contract_clause,
+        ];
+        const seen = new Set();
+        return candidates
+            .map((candidate) => String(candidate || '').trim())
+            .filter((candidate) => normalizeCandidate(candidate).length >= 8)
+            .filter((candidate) => {
+                const key = normalizeCandidate(candidate);
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    };
+
     const findTextRangeByCandidates = async (candidates) => {
         for (const candidate of candidates) {
             const range = await findTextRange(candidate);
@@ -94,7 +177,7 @@ export function useReviewEditor(state, helpers) {
     };
 
     const ensureEditorReady = () => {
-        if (!getEditor()) {
+        if (!getEditor() && !getCommunityEditor()) {
             ElMessage.warning('编辑器尚未就绪，请等待左侧文档加载完成。');
             return false;
         }
@@ -102,6 +185,8 @@ export function useReviewEditor(state, helpers) {
     };
 
     const previewSuggestion = (item, status = '待采纳') => {
+        item._showPreview = status === '待采纳' ? !item._showPreview : true;
+        if (!item._showPreview) return;
         selectedSuggestionPreview.value = {
             before: suggestionOriginal(item) || 'AI 未返回可直接定位的原文。',
             after: suggestionText(item) || 'AI 未返回建议替换文本。',
@@ -109,19 +194,19 @@ export function useReviewEditor(state, helpers) {
         };
     };
 
-    const locateText = async (text) => {
+    const locateText = async (text, item = {}) => {
         if (!text) {
             ElMessage.info('AI 未返回可定位的原文，请在文档中手动核对该建议。');
             return;
         }
         if (!ensureEditorReady()) return;
         try {
-            const range = await findTextRange(text);
-            if (!range) {
+            const matched = await findTextRangeByCandidates(buildSuggestionCandidates(text, item));
+            if (!matched?.range) {
                 ElMessage.info('未在文档中找到对应条款原文。');
                 return;
             }
-            await executeEditorMethod('SelectRange', [range]);
+            await executeEditorMethod('SelectRange', [matched.range]);
             ElMessage.success('已定位到文档中的对应条款。');
         } catch (error) {
             ElMessage.error('文档定位失败，请检查 OnlyOffice 是否已完全加载。');
@@ -132,7 +217,7 @@ export function useReviewEditor(state, helpers) {
         const response = await api.replaceContractText(contract.id, {
             originalText,
             suggestedText,
-            originalCandidates: buildSuggestionCandidates(originalText, item),
+            originalCandidates: buildReplacementCandidates(originalText, item),
         });
         return response.data.replacements || 0;
     };
@@ -179,7 +264,7 @@ export function useReviewEditor(state, helpers) {
             return;
         }
         try {
-            const matched = await findTextRangeByCandidates(buildSuggestionCandidates(originalText, item));
+            const matched = await findTextRangeByCandidates(buildReplacementCandidates(originalText, item));
             if (!matched?.range) {
                 await runServerFallback('编辑器未匹配到原文，已尝试从 DOCX 源文件替换');
                 return;
@@ -254,20 +339,21 @@ export function useReviewEditor(state, helpers) {
         const editor = getEditor();
 
         try {
-            const canUseLiveApi = typeof editor.executeMethod === 'function'
-                || typeof editor.createConnector === 'function'
-                || Boolean(window.Asc?.plugin?.callCommand);
+            const canUseLiveApi = typeof editor?.executeMethod === 'function'
+                || typeof editor?.createConnector === 'function'
+                || Boolean(window.Asc?.plugin?.callCommand)
+                || Boolean(getCommunityEditor());
             if (!canUseLiveApi) {
                 await serverFallback(originalText, suggestedText, onSuccess, onFailure, item);
                 return;
             }
 
-            const matched = await findTextRangeByCandidates(buildSuggestionCandidates(originalText, item));
+            const matched = await findTextRangeByCandidates(buildReplacementCandidates(originalText, item));
             if (matched?.range) {
                 await executeEditorMethod('SelectRange', [matched.range]);
             }
 
-            if (matched?.range && typeof editor.createConnector === 'function') {
+            if (matched?.range && typeof editor?.createConnector === 'function') {
                 const connector = editor.createConnector();
                 if (connector?.callCommand) {
                     const asc = window.Asc || (window.Asc = {});
@@ -325,6 +411,7 @@ export function useReviewEditor(state, helpers) {
 
             if (success) {
                 await markAdoptedText(originalText, suggestedText);
+                scheduleForceSave(500);
                 onSuccess?.({ realTime: true });
                 ElMessage.success('建议已实时采纳并更新到文档');
                 return;
@@ -402,15 +489,15 @@ export function useReviewEditor(state, helpers) {
     const onDocumentReady = () => {
         console.log("[INFO] OnlyOffice document is ready.");
         setTimeout(() => {
-            isEditorReady.value = Boolean(window?.DocEditor?.instances?.docEditorComponent);
+            isEditorReady.value = Boolean(getEditor() || getCommunityEditor());
             if (isEditorReady.value) startAutoForceSave();
         }, 300);
     };
 
     return {
         forceSaveTimer, forceSaveDebounceTimer, forceSaveInFlight, hasPendingEditorChanges,
-        getEditor, executeEditorMethod, findTextRange, normalizeCandidate,
-        splitCandidateSentences, buildSuggestionCandidates, findTextRangeByCandidates,
+        getEditor, getCommunityEditor, executeEditorMethod, findTextRange, normalizeCandidate,
+        splitCandidateSentences, buildSuggestionCandidates, buildReplacementCandidates, findTextRangeByCandidates,
         ensureEditorReady, previewSuggestion, locateText, replaceTextOnServer,
         markAdoptedText, replaceTextInEditor, refreshEditorDocument, serverFallback,
         replaceTextInEditorFinal,

@@ -9,8 +9,9 @@ export function useReviewActions(state, editor, helpers) {
         selectedSuggestionPreview,
     } = state;
     const {
-        executeEditorMethod, ensureEditorReady, findTextRange,
-        buildSuggestionCandidates, replaceTextInEditorFinal, previewSuggestion,
+        executeEditorMethod, ensureEditorReady, findTextRangeByCandidates,
+        buildSuggestionCandidates, buildReplacementCandidates, replaceTextInEditorFinal, previewSuggestion,
+        scheduleForceSave,
     } = editor;
     const { suggestionOriginal, suggestionText, suggestionTitle } = helpers;
 
@@ -19,25 +20,26 @@ export function useReviewActions(state, editor, helpers) {
     const diffItems = ref([]);
     const diffLoading = ref(false);
 
-    const addDocComment = async (text, comment) => {
+    const addDocComment = async (text, comment, item = {}) => {
         if (!text) {
             ElMessage.info('AI 未返回可批注定位的原文，请手动添加批注。');
             return;
         }
         if (!ensureEditorReady()) return;
         try {
-            const range = await findTextRange(text);
-            if (!range) {
+            const matched = await findTextRangeByCandidates(buildSuggestionCandidates(text, item));
+            if (!matched?.range) {
                 ElMessage.info('定位原文失败，无法添加批注。');
                 return;
             }
-            await executeEditorMethod('SelectRange', [range]);
+            await executeEditorMethod('SelectRange', [matched.range]);
             const bookmark = `ai_review_${Date.now()}`;
             await executeEditorMethod('AddBookmark', [bookmark]).catch(() => null);
             await executeEditorMethod('AddComment', [comment || 'AI 审查建议', 'AI 审查专家']).catch(async () => {
                 await executeEditorMethod('AddComment', [comment || 'AI 审查建议']);
             });
-            ElMessage.success('已在文档中添加批注，并尝试写入书签锚点。');
+            scheduleForceSave(300);
+            ElMessage.success('已在文档中添加批注并触发保存。');
         } catch (error) {
             ElMessage.error('添加批注失败：当前 OnlyOffice 未开放批注接口。');
         }
@@ -93,7 +95,7 @@ export function useReviewActions(state, editor, helpers) {
                 return {
                     originalText: suggestionOriginal(item),
                     suggestedText: suggestionText(item),
-                    originalCandidates: buildSuggestionCandidates(suggestionOriginal(item), item),
+                    originalCandidates: buildReplacementCandidates(suggestionOriginal(item), item),
                 };
             });
             const response = await api.batchReplaceContractText(contract.id, { suggestions });

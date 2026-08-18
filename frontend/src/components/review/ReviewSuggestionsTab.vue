@@ -22,12 +22,12 @@
           <p class="font-semibold text-text-dark pr-2">{{ suggestionTitle(item, index) }}</p>
           <div class="flex space-x-1 flex-shrink-0">
             <el-tooltip content="在文档中定位" placement="top">
-              <button @click="locateText(suggestionOriginal(item))" class="p-1 text-gray-400 hover:text-primary transition-colors">
+              <button @click="locateText(suggestionOriginal(item), item)" class="p-1 text-gray-400 hover:text-primary transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </button>
             </el-tooltip>
             <el-tooltip content="添加批注" placement="top">
-              <button @click="addDocComment(suggestionOriginal(item), suggestionReason(item))" class="p-1 text-gray-400 hover:text-primary transition-colors">
+              <button @click="addDocComment(suggestionOriginal(item), suggestionReason(item), item)" class="p-1 text-gray-400 hover:text-primary transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
               </button>
             </el-tooltip>
@@ -62,9 +62,9 @@
             <p class="text-gray-500 font-medium">理由：</p>
             <p class="mt-1 text-text-main">{{ suggestionReason(item) }}</p>
           </div>
-          <div v-if="item.citations && item.citations.length" class="text-xs">
+          <div v-if="suggestionCitations(item).length" class="text-xs">
             <p class="text-gray-500 font-medium">法律依据：</p>
-            <div v-for="(cite, cIndex) in item.citations" :key="'cite-' + index + '-' + cIndex" class="mt-1 p-2 bg-blue-50 border-l-4 border-blue-300 rounded">
+            <div v-for="(cite, cIndex) in suggestionCitations(item)" :key="'cite-' + index + '-' + cIndex" class="mt-1 p-2 bg-blue-50 border-l-4 border-blue-300 rounded">
               <p class="font-medium text-blue-800">【{{ cite.source_type || '依据' }}】{{ cite.title || '' }}{{ cite.clause ? ' ' + cite.clause : '' }}</p>
               <p v-if="cite.content" class="mt-0.5 text-blue-700">{{ cite.content }}</p>
             </div>
@@ -82,19 +82,29 @@
                 ? 'text-green-700 bg-green-50 border-green-300 hover:bg-green-100'
                 : 'text-purple-700 bg-purple-50 border-purple-300 hover:bg-purple-100'
             ]"
-            :title="item._negotiation ? '已推演过,点击查看或收起' : '点击进行谈判推演'"
+            :title="item._negotiationError ? '上次推演失败，点击重试' : (item._negotiation ? '已推演过，点击查看或收起' : '点击进行谈判推演')"
           >
             <svg v-if="item._negotiationLoading" class="animate-spin h-3.5 w-3.5 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
             <svg v-else-if="item._negotiation" class="h-3.5 w-3.5 mr-1 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            {{ item._negotiationLoading ? '推演中...' : (item._showNegotiation ? '收起推演' : (item._negotiation ? '已推演·查看' : '谈判推演')) }}
+            {{ item._negotiationLoading ? '推演中...' : (item._negotiationError ? '重新推演' : (item._showNegotiation && item._negotiation ? '收起推演' : (item._negotiation ? '已推演·查看' : '谈判推演'))) }}
           </button>
           <button @click="previewSuggestion(item)" class="mr-2 px-3 py-1.5 text-xs font-medium text-primary bg-white border border-primary rounded hover:bg-primary-light transition-colors">
-            查看变更
+            {{ item._showPreview ? '收起变更' : '查看变更' }}
           </button>
           <button @click="adoptSuggestion(item)" :disabled="isPdfContract || item.adopted" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
             {{ item.adopted ? '已采纳' : '一键采纳建议' }}
           </button>
+        </div>
+        <div v-if="item._showPreview" class="mt-3 grid grid-cols-1 xl:grid-cols-2 gap-3 text-xs">
+          <div class="rounded border border-red-100 bg-red-50 p-3">
+            <p class="font-semibold text-red-700">修改前</p>
+            <p class="mt-1 whitespace-pre-line leading-5 text-red-800">{{ suggestionOriginal(item) || '暂无可展示原文' }}</p>
+          </div>
+          <div class="rounded border border-green-100 bg-green-50 p-3">
+            <p class="font-semibold text-green-700">修改后</p>
+            <p class="mt-1 whitespace-pre-line leading-5 text-green-800">{{ suggestionText(item) || '暂无可展示建议' }}</p>
+          </div>
         </div>
         <!-- 4.1 谈判推演面板 -->
         <div v-if="item._showNegotiation && item._negotiation" class="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-md space-y-3">
@@ -150,14 +160,14 @@ export default {
     const {
       reviewData, showPlainLanguage, isPdfContract,
       selectedSuggestionIndexes, batchApplying,
-      suggestionTitle, suggestionOriginal, suggestionText, suggestionReason,
+      suggestionTitle, suggestionOriginal, suggestionText, suggestionReason, suggestionCitations,
       locateText, addDocComment, previewSuggestion, adoptSuggestion,
       applySelectedSuggestions, toggleNegotiation, adoptFallbackOption,
     } = review;
     return {
       reviewData, showPlainLanguage, isPdfContract,
       selectedSuggestionIndexes, batchApplying,
-      suggestionTitle, suggestionOriginal, suggestionText, suggestionReason,
+      suggestionTitle, suggestionOriginal, suggestionText, suggestionReason, suggestionCitations,
       locateText, addDocComment, previewSuggestion, adoptSuggestion,
       applySelectedSuggestions, toggleNegotiation, adoptFallbackOption,
     };

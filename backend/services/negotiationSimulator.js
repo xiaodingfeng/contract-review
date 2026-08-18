@@ -25,7 +25,22 @@ const cleanJsonResponse = (text) => {
         .replace(/<think>[\s\S]*?<\/think>/g, '')
         .replace(/```json|```/g, '')
         .trim();
-    return JSON.parse(clean);
+    try {
+        return JSON.parse(clean);
+    } catch {
+        const objectMatch = clean.match(/\{[\s\S]*\}/);
+        if (!objectMatch) throw new Error('模型未返回有效的谈判推演 JSON。');
+        return JSON.parse(objectMatch[0]);
+    }
+};
+
+const basisText = (suggestion = {}) => {
+    if (typeof suggestion.basis === 'string') return suggestion.basis;
+    if (typeof suggestion.legal_basis === 'string') return suggestion.legal_basis;
+    const entries = Array.isArray(suggestion.basis)
+        ? suggestion.basis
+        : (Array.isArray(suggestion.legal_basis) ? suggestion.legal_basis : []);
+    return entries.map((item) => item?.content || item?.text || item?.title || '').filter(Boolean).join('；');
 };
 
 // 从合同主体推断对方立场:用户立场为甲方→对方为乙方;反之亦然
@@ -49,9 +64,12 @@ const inferCounterpartyPerspective = (userPerspective, contractContext = {}) => 
 const buildSimulationPrompt = (suggestion, contractContext, counterpartyPerspective) => {
     const contractType = contractContext.contract_type || '未指定';
     const contractSummary = contractContext.summary || '未提供';
-    const originalText = suggestion.original_text || suggestion.original_clause || '';
-    const suggestedText = suggestion.suggested_text || suggestion.modification || '';
-    const reason = suggestion.reason || suggestion.rationale || '';
+    const originalText = suggestion.original_text || suggestion.original_clause
+        || suggestion.current_clause || suggestion.contract_clause || suggestion.before || '';
+    const suggestedText = suggestion.suggested_text || suggestion.modification
+        || suggestion.suggestion || suggestion.proposed_clause || suggestion.corrected_clause || suggestion.after || '';
+    const reason = suggestion.reason || suggestion.rationale || suggestion.reasoning
+        || suggestion.risk_description || basisText(suggestion);
 
     return `你是一名资深法务谈判专家,正在模拟合同谈判的对方立场反向论证。
 
@@ -110,7 +128,7 @@ const simulateNegotiation = async (suggestion, contractContext = {}, counterpart
     const completion = await createChatCompletion({
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
-    });
+    }, { timeout: 60000, maxRetries: 0 });
 
     const parsed = cleanJsonResponse(completion.choices[0].message.content);
 
@@ -159,4 +177,7 @@ module.exports = {
     simulateNegotiation,
     simulateNegotiationBatch,
     inferCounterpartyPerspective,
+    cleanJsonResponse,
+    basisText,
+    buildSimulationPrompt,
 };

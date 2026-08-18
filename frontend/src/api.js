@@ -121,7 +121,7 @@ export default {
 
     // 4.1 谈判博弈模拟:对修改建议模拟对方立场反向论证
     simulateNegotiation(contractId, payload = {}) {
-        return apiClient.post(`/contracts/${contractId}/simulate-negotiation`, payload);
+        return apiClient.post(`/contracts/${contractId}/simulate-negotiation`, payload, { timeout: 75000 });
     },
 
     // 4.3 行业标准条款库

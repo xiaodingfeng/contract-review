@@ -104,13 +104,15 @@ module.exports = function (router) {
         if (!contract) return res.status(404).json({ error: 'Contract not found.' });
 
         try {
-            const { suggestionIds, counterpartyPerspective } = req.body || {};
+            const { suggestionIds, suggestion, counterpartyPerspective } = req.body || {};
             const reviewData = parseJsonField(contract.analysis_result, parseJsonField(contract.analysis_partial_result, {}));
             const allSuggestions = Array.isArray(reviewData.modification_suggestions) ? reviewData.modification_suggestions : [];
 
             // 筛选目标建议:若指定 suggestionIds 则按 id 过滤,否则取全部
             let targetSuggestions = allSuggestions;
-            if (Array.isArray(suggestionIds) && suggestionIds.length) {
+            if (suggestion && typeof suggestion === 'object') {
+                targetSuggestions = [suggestion];
+            } else if (Array.isArray(suggestionIds) && suggestionIds.length) {
                 targetSuggestions = allSuggestions.filter((s) => suggestionIds.includes(s.id) || suggestionIds.includes(String(s.id)));
                 if (targetSuggestions.length === 0) {
                     return res.status(404).json({ error: '未找到指定的修改建议。' });

@@ -46,7 +46,8 @@ const isRetryableError = (error) => {
 };
 
 const createChatCompletion = async (options, requestOptions = {}) => {
-    const maxRetries = Number(process.env.LLM_MAX_RETRIES || 2);
+    const { maxRetries: requestMaxRetries, ...sdkRequestOptions } = requestOptions;
+    const maxRetries = Number(requestMaxRetries ?? process.env.LLM_MAX_RETRIES ?? 2);
     const baseDelay = Number(process.env.LLM_RETRY_BASE_MS || 800);
     const timeout = Number(process.env.LLM_TIMEOUT_MS || 90000);
     let lastError;
@@ -58,7 +59,7 @@ const createChatCompletion = async (options, requestOptions = {}) => {
                 ...options,
             }, {
                 timeout,
-                ...requestOptions,
+                ...sdkRequestOptions,
             });
         } catch (error) {
             lastError = error;
@@ -73,7 +74,8 @@ const createChatCompletion = async (options, requestOptions = {}) => {
 };
 
 const createVisionCompletion = async (options, requestOptions = {}) => {
-    const maxRetries = Number(process.env.LLM_MAX_RETRIES || 2);
+    const { maxRetries: requestMaxRetries, ...sdkRequestOptions } = requestOptions;
+    const maxRetries = Number(requestMaxRetries ?? process.env.LLM_MAX_RETRIES ?? 2);
     const baseDelay = Number(process.env.LLM_RETRY_BASE_MS || 800);
     const timeout = Number(process.env.LLM_TIMEOUT_MS || 90000);
     let lastError;
@@ -85,7 +87,7 @@ const createVisionCompletion = async (options, requestOptions = {}) => {
                 ...options,
             }, {
                 timeout,
-                ...requestOptions,
+                ...sdkRequestOptions,
             });
         } catch (error) {
             lastError = error;

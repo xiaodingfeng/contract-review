@@ -41,7 +41,13 @@ export function useReviewHelpers(state) {
     const suggestionTitle = (item, index) => firstText(item.title, item.clause, `修改建议 ${index + 1}`);
 
     const suggestionOriginal = (item) => {
-        const direct = firstText(item.original_text, item.original_clause);
+        const direct = firstText(
+            item.original_text,
+            item.original_clause,
+            item.current_clause,
+            item.contract_clause,
+            item.before,
+        );
         if (direct) return direct;
         const title = firstText(item.clause, item.title);
         const relatedRisk = (reviewData.dispute_points || []).find((risk) => {
@@ -50,9 +56,35 @@ export function useReviewHelpers(state) {
         return firstText(relatedRisk?.original_clause, title);
     };
 
-    const suggestionText = (item) => firstText(item.suggested_text, item.modification);
+    const suggestionText = (item) => firstText(
+        item.suggested_text,
+        item.modification,
+        item.suggestion,
+        item.proposed_clause,
+        item.corrected_clause,
+        item.after,
+    );
 
-    const suggestionReason = (item) => firstText(item.reason, item.rationale);
+    const suggestionCitations = (item) => {
+        if (Array.isArray(item.citations) && item.citations.length) return item.citations;
+        if (Array.isArray(item.basis) && item.basis.length) return item.basis;
+        if (Array.isArray(item.legal_basis) && item.legal_basis.length) return item.legal_basis;
+        return [];
+    };
+
+    const suggestionReason = (item) => firstText(
+        item.reason,
+        item.rationale,
+        item.reasoning,
+        item.risk_description,
+        typeof item.basis === 'string' ? item.basis : '',
+        typeof item.legal_basis === 'string' ? item.legal_basis : '',
+        suggestionCitations(item).map((citation) => firstText(
+            citation.content,
+            citation.text,
+            citation.title,
+        )).filter(Boolean).join('；'),
+    );
 
     // --- 公司风险画像辅助 ---
     const companyRiskLabel = (level) => ({
@@ -220,15 +252,24 @@ export function useReviewHelpers(state) {
 
     // --- 谈判推演 ---
     const toggleNegotiation = async (item) => {
-        if (item._negotiation || item._negotiationError) {
+        if (item._negotiation) {
             item._showNegotiation = !item._showNegotiation;
             return;
         }
+        if (item._negotiationLoading) return;
         item._showNegotiation = true;
         item._negotiationLoading = true;
+        item._negotiationError = '';
         try {
             const response = await api.simulateNegotiation(contract.id, {
                 suggestionIds: item.id ? [item.id] : [],
+                suggestion: {
+                    id: item.id || '',
+                    title: suggestionTitle(item, 0),
+                    original_text: suggestionOriginal(item),
+                    suggested_text: suggestionText(item),
+                    reason: suggestionReason(item),
+                },
             });
             const data = response.data || {};
             const results = Array.isArray(data.results) ? data.results : [];
@@ -266,7 +307,7 @@ export function useReviewHelpers(state) {
         expandedCompanyCards,
         disputeTitle, disputeDescription, missingClauseTitle,
         partyReviewTitle, partyReviewDescription,
-        suggestionTitle, suggestionOriginal, suggestionText, suggestionReason,
+        suggestionTitle, suggestionOriginal, suggestionText, suggestionReason, suggestionCitations,
         companyRiskLabel, companyRiskBadgeClass, companyCardBorderClass, toggleCompanyCard,
         dataSourceLabel, dataSourceClass, isLawOutdated,
         sealItemClass, sealStatusClass, formatIncrementalTime,

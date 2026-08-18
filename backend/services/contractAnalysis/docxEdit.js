@@ -67,6 +67,18 @@ const findDocxTextRange = (fullText, candidate) => {
     return { start, end };
 };
 
+const isHeadingParagraphAt = (xml, position) => {
+    const paragraphStart = Math.max(
+        xml.lastIndexOf('<w:p>', position),
+        xml.lastIndexOf('<w:p ', position),
+    );
+    if (paragraphStart < 0) return false;
+    const paragraphEnd = xml.indexOf('</w:p>', position);
+    if (paragraphEnd < 0) return false;
+    const paragraphXml = xml.slice(paragraphStart, paragraphEnd + 6);
+    return /<w:pStyle\b[^>]*w:val="(?:Heading\d*|Title|标题\d*)"/i.test(paragraphXml);
+};
+
 const replaceTextInXmlRuns = (xml, candidate, suggestedText) => {
     const textRunPattern = /<w:t\b([^>]*)>([\s\S]*?)<\/w:t>/g;
     const runs = [];
@@ -83,6 +95,7 @@ const replaceTextInXmlRuns = (xml, candidate, suggestedText) => {
             text: decodedText,
             start: fullText.length,
             end: fullText.length + decodedText.length,
+            isHeading: isHeadingParagraphAt(xml, match.index),
         });
         fullText += decodedText;
     }
@@ -90,7 +103,11 @@ const replaceTextInXmlRuns = (xml, candidate, suggestedText) => {
     const range = findDocxTextRange(fullText, candidate);
     if (!range) return { xml, replaced: false };
 
-    let inserted = false;
+    const overlappingRuns = runs.filter((run) => run.end > range.start && run.start < range.end);
+    // A multi-paragraph AI suggestion may include a section heading in the
+    // selected source. Insert into the first body run so the replacement does
+    // not inherit a large Heading style.
+    const insertionRun = overlappingRuns.find((run) => !run.isHeading) || overlappingRuns[0];
     const safeSuggestion = String(suggestedText || '').replace(/\r?\n+/g, ' ');
     const parts = [];
     let cursor = 0;
@@ -108,12 +125,8 @@ const replaceTextInXmlRuns = (xml, candidate, suggestedText) => {
         const overlapEnd = Math.min(range.end, run.end) - run.start;
         const before = run.text.slice(0, overlapStart);
         const after = run.text.slice(overlapEnd);
-        let nextText = '';
-
-        if (!inserted) {
-            nextText = before + safeSuggestion;
-            inserted = true;
-        }
+        let nextText = run.start <= range.start ? before : '';
+        if (run === insertionRun) nextText += safeSuggestion;
         if (run.end >= range.end) {
             nextText += after;
         }
@@ -189,6 +202,7 @@ module.exports = {
     unescapeXmlText,
     normalizeForDocxMatch,
     findDocxTextRange,
+    isHeadingParagraphAt,
     replaceTextInXmlRuns,
     normalizeReplacementCandidates,
     replaceTextInDocx,

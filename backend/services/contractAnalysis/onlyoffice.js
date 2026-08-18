@@ -25,6 +25,19 @@ const ONLYOFFICE_URL = process.env.ONLYOFFICE_URL || 'http://localhost:8081';
 const APP_HOST = process.env.APP_HOST;
 const BACKEND_URL_FOR_DOCKER = process.env.BACKEND_URL_FOR_DOCKER || APP_HOST;
 
+const normalizeOnlyOfficeDownloadUrl = (rawUrl) => {
+    const parsed = new URL(rawUrl);
+    let pathname = parsed.pathname;
+    if (pathname.startsWith('/onlyoffice/')) pathname = pathname.slice('/onlyoffice'.length);
+    if (!pathname.startsWith('/')) pathname = `/${pathname}`;
+
+    const internalBase = new URL(ONLYOFFICE_URL.endsWith('/') ? ONLYOFFICE_URL : `${ONLYOFFICE_URL}/`);
+    internalBase.pathname = pathname;
+    internalBase.search = parsed.search;
+    internalBase.hash = '';
+    return internalBase.toString();
+};
+
 const buildOnlyOfficeConfig = (contractRecord, ext = 'docx') => {
     const isPdf = ext === 'pdf';
     const fileUrl = `${BACKEND_URL_FOR_DOCKER}/api/uploads/${path.basename(contractRecord.storage_path)}`;
@@ -100,6 +113,7 @@ module.exports = {
     ONLYOFFICE_URL,
     APP_HOST,
     BACKEND_URL_FOR_DOCKER,
+    normalizeOnlyOfficeDownloadUrl,
     buildOnlyOfficeConfig,
     postOnlyOfficeCommand,
 };

@@ -24,7 +24,7 @@ const { v4: uuidv4 } = require('uuid');
 const unidecode = require('unidecode');
 const db = require('../../database');
 const { ensureUploadUser } = require('../../services/contractAnalysis/knowledge');
-const { buildOnlyOfficeConfig } = require('../../services/contractAnalysis/onlyoffice');
+const { buildOnlyOfficeConfig, normalizeOnlyOfficeDownloadUrl } = require('../../services/contractAnalysis/onlyoffice');
 const { extractTextFromFile } = require('../../services/contractAnalysis/fileExtraction');
 const { getIoInstance } = require('../../services/contractAnalysis/analysisJob');
 const { diffClauses } = require('../../services/incrementalReview');
@@ -116,7 +116,8 @@ module.exports = function (router) {
             if (body.status === 2 || body.status === 6) {
                 const contract = await db('contracts').where({ document_key: body.key }).first();
                 if (contract && body.url) {
-                    const response = await axios.get(body.url, { responseType: 'stream' });
+                    const downloadUrl = normalizeOnlyOfficeDownloadUrl(body.url);
+                    const response = await axios.get(downloadUrl, { responseType: 'stream', timeout: 30000 });
                     const writer = fs.createWriteStream(contract.storage_path);
                     response.data.pipe(writer);
                     await new Promise((resolve, reject) => {

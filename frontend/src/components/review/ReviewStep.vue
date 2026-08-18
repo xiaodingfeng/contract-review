@@ -12,6 +12,7 @@
       </div>
       <DocumentEditor
         v-if="contract.editorConfig"
+        :key="contract.editorConfig.document?.key || contract.id"
         id="docEditorComponent"
         ref="docEditorComponent"
         class="flex-grow min-h-0"
