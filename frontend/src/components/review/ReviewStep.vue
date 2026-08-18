@@ -2,11 +2,15 @@
   <div class="flex-grow min-h-0 flex gap-4">
     <!-- Left Side: OnlyOffice Editor -->
     <div class="basis-0 flex-[3] min-w-0 bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
-      <div class="px-3 py-2 border-b border-border-color bg-bg-subtle flex items-center justify-between gap-3">
-        <div class="text-sm text-text-main">
-          左侧为合同实时预览与编辑区。可选中文本后进行专项审查。
+      <div class="document-workbar px-3 py-2 border-b border-border-color bg-bg-subtle flex items-center justify-between gap-4">
+        <div class="min-w-0 flex items-center gap-5">
+          <StepHeader :activeStep="2" compact />
+          <div class="document-context border-l border-border-color pl-4">
+            <p class="text-xs font-semibold text-text-dark whitespace-nowrap">合同协同区</p>
+            <p class="mt-0.5 text-xs text-text-light whitespace-nowrap">选中文本可进行专项审查</p>
+          </div>
         </div>
-        <button @click="prepareFocusedReviewFromSelection" class="px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark">
+        <button @click="prepareFocusedReviewFromSelection" class="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded hover:bg-primary-dark">
           读取选中文本审查
         </button>
       </div>
@@ -103,6 +107,7 @@
 import { inject } from 'vue';
 import { ElSwitch, ElTag } from 'element-plus';
 import { DocumentEditor } from '@onlyoffice/document-editor-vue';
+import StepHeader from './StepHeader.vue';
 import ZhongAnReviewReport from './ZhongAnReviewReport.vue';
 import ReviewSuggestionsTab from './ReviewSuggestionsTab.vue';
 import ReviewWorkspaceTab from './ReviewWorkspaceTab.vue';
@@ -110,7 +115,7 @@ import ReviewWorkspaceTab from './ReviewWorkspaceTab.vue';
 export default {
   name: 'ReviewStep',
   components: {
-    DocumentEditor, ElSwitch, ElTag,
+    DocumentEditor, ElSwitch, ElTag, StepHeader,
     ZhongAnReviewReport, ReviewSuggestionsTab, ReviewWorkspaceTab,
   },
   setup() {
@@ -135,3 +140,22 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.document-context {
+  flex: 0 0 148px;
+}
+
+@media (max-width: 1280px) {
+  .document-context {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .document-workbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>

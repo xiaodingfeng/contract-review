@@ -1,6 +1,6 @@
 <template>
   <div class="review-page w-full h-full flex flex-col">
-    <StepHeader :activeStep="activeStep" />
+    <StepHeader v-if="activeStep !== 2" :activeStep="activeStep" />
     <UploadStep v-if="activeStep === 0" />
     <SettingsStep v-if="activeStep === 1" />
     <ReviewStep v-if="activeStep === 2" />
