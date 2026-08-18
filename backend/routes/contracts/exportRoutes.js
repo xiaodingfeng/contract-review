@@ -67,9 +67,9 @@ module.exports = function (router) {
             '',
             ...suggestions.flatMap((item, index) => [
                 `#${index + 1} ${item.title || item.clause || '修改建议'}`,
-                `原文：${item.original_text || item.original_clause || ''}`,
+                `现状条款：${item.current_clause || item.original_text || item.original_clause || ''}`,
                 `建议修改为：${item.suggested_text || item.modification || ''}`,
-                `修改理由：${item.reason || item.rationale || ''}`,
+                `依据：${Array.isArray(item.basis) ? item.basis.map((basis) => [basis.title, basis.clause, basis.content].filter(Boolean).join(' ')).join('；') : (item.basis || item.reason || item.rationale || '当前知识库未检索到直接依据')}`,
                 '',
             ]),
         ];

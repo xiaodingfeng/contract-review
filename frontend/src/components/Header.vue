@@ -1,7 +1,10 @@
 <template>
   <div class="header-component">
-    <img src="/asserts/logo.png" alt="合同审查" class="logo">
-    <h1>合同审查 AI 应用</h1>
+    <img src="/asserts/zhongan-logo.png" alt="众安集团" class="logo">
+    <div>
+      <h1>合同审核</h1>
+      <p>INTERNAL REVIEW</p>
+    </div>
   </div>
 </template>
 
@@ -16,17 +19,26 @@ export default {
   display: flex;
   align-items: center;
   padding: 10px 20px;
-  background-color: #111111;
+  background-color: #006f6c;
   color: white;
 }
 
 .logo {
-  height: 40px;
-  margin-right: 20px;
+  width: 132px;
+  height: auto;
+  margin-right: 12px;
 }
 
 h1 {
   margin: 0;
   font-size: 20px;
+}
+
+p {
+  margin: 2px 0 0;
+  color: #e4c987;
+  font-family: Georgia, serif;
+  font-size: 9px;
+  letter-spacing: .16em;
 }
 </style>

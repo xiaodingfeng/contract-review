@@ -1,7 +1,7 @@
 <template>
-  <div class="flex-grow min-h-0 flex space-x-4">
+  <div class="flex-grow min-h-0 flex gap-4">
     <!-- Left Side: OnlyOffice Editor -->
-    <div class="w-2/3 bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
+    <div class="basis-0 flex-[3] min-w-0 bg-white rounded-lg shadow-md overflow-hidden h-full flex flex-col">
       <div class="px-3 py-2 border-b border-border-color bg-bg-subtle flex items-center justify-between gap-3">
         <div class="text-sm text-text-main">
           左侧为合同实时预览与编辑区。可选中文本后进行专项审查。
@@ -39,9 +39,9 @@
     </div>
 
     <!-- Right Side: AI Review Panel -->
-    <div class="w-1/3 bg-white rounded-lg shadow-md flex flex-col h-full">
+    <div class="basis-0 flex-[2] min-w-0 bg-white rounded-lg shadow-md flex flex-col h-full">
       <!-- Panel Header -->
-      <div class="p-3 border-b border-border-color flex justify-between items-center flex-shrink-0">
+      <div class="p-3 border-b border-border-color flex flex-col gap-3 flex-shrink-0">
         <div class="flex items-center">
           <h3 class="text-lg font-semibold text-text-dark">AI 审查报告</h3>
           <div class="ml-4 flex items-center">
@@ -49,13 +49,13 @@
             <el-switch v-model="showPlainLanguage" size="small"></el-switch>
           </div>
         </div>
-        <div class="flex items-center flex-nowrap whitespace-nowrap">
-          <button @click="exportReport('html')" class="mr-3 text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap">导出HTML</button>
-          <button @click="exportReport('word')" class="mr-3 text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap">导出Word</button>
-          <button @click="downloadPdfAnnotations" class="mr-3 text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap">PDF批注</button>
+        <div class="flex items-center flex-wrap gap-x-3 gap-y-2">
+          <button @click="exportReport('html')" class="text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap">导出HTML</button>
+          <button @click="exportReport('word')" class="text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap">导出Word</button>
+          <button @click="downloadPdfAnnotations" class="text-sm font-medium text-primary hover:text-primary-dark whitespace-nowrap">PDF批注</button>
           <template v-if="cameFromHistory">
             <button @click="goBackToUpload" class="text-sm font-medium text-primary hover:text-primary-dark">重新上传</button>
-            <button @click="goBackSmart" class="ml-4 text-sm font-medium text-primary hover:text-primary-dark">返回历史</button>
+            <button @click="goBackSmart" class="text-sm font-medium text-primary hover:text-primary-dark">返回历史</button>
           </template>
           <template v-else>
             <button @click="goBackSmart" class="text-sm font-medium text-primary hover:text-primary-dark">返回上一步</button>
@@ -75,7 +75,7 @@
 
       <!-- Tab Content -->
       <div class="p-3 overflow-y-auto flex-grow">
-        <ReviewSummaryTab v-if="activeAiTab === 'summary'" />
+        <ZhongAnReviewReport v-if="activeAiTab === 'summary'" />
         <ReviewSuggestionsTab v-if="activeAiTab === 'suggestions'" />
         <!-- Relevant Laws (Knowledge tab) -->
         <div v-if="activeAiTab === 'knowledge'">
@@ -102,7 +102,7 @@
 import { inject } from 'vue';
 import { ElSwitch, ElTag } from 'element-plus';
 import { DocumentEditor } from '@onlyoffice/document-editor-vue';
-import ReviewSummaryTab from './ReviewSummaryTab.vue';
+import ZhongAnReviewReport from './ZhongAnReviewReport.vue';
 import ReviewSuggestionsTab from './ReviewSuggestionsTab.vue';
 import ReviewWorkspaceTab from './ReviewWorkspaceTab.vue';
 
@@ -110,7 +110,7 @@ export default {
   name: 'ReviewStep',
   components: {
     DocumentEditor, ElSwitch, ElTag,
-    ReviewSummaryTab, ReviewSuggestionsTab, ReviewWorkspaceTab,
+    ZhongAnReviewReport, ReviewSuggestionsTab, ReviewWorkspaceTab,
   },
   setup() {
     const review = inject('review');

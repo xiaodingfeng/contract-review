@@ -1,18 +1,44 @@
 <template>
   <main class="home-page">
     <section class="hero-section">
-      <img
-        class="hero-image"
-        src="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=1600&q=80"
-        alt="合同审查工作台"
-      />
-      <div class="hero-overlay"></div>
-      <div class="hero-content">
-        <p class="eyebrow">合同审查工作台</p>
-        <h1>把合同风险看清楚，把修改意见落到文档里。</h1>
-        <p class="hero-copy">上传合同后，按步骤确认范围、查看结论，并在同一页面完成修改建议采纳。</p>
-        <button class="primary-button" @click="startNewReview">开始审查</button>
+      <div class="hero-architecture" aria-hidden="true">
+        <span class="tower tower-one"></span>
+        <span class="tower tower-two"></span>
+        <span class="tower tower-three"></span>
+        <span class="horizon"></span>
       </div>
+      <div class="hero-content">
+        <p class="eyebrow">ZHONG AN CONTRACT INTELLIGENCE</p>
+        <h1>每一条款，有据可核。</h1>
+        <p class="hero-copy">面向成本与法务联合会审，从内部范本、审查要点、法规与案例中找到依据，让修改意见真正落到合同。</p>
+        <div class="hero-actions">
+          <button class="primary-button" @click="startNewReview">开始新审查 <span>→</span></button>
+          <span class="knowledge-note"><i></i>仅使用企业知识库</span>
+        </div>
+      </div>
+      <div class="hero-side-note">
+        <strong>00672.HK</strong>
+        <span>成本管控 · 法务合规</span>
+      </div>
+    </section>
+
+    <section class="evidence-strip" aria-label="审查依据">
+      <article>
+        <span>01</span>
+        <div><strong>合同范本库</strong><small>五类业务标准范本</small></div>
+      </article>
+      <article>
+        <span>02</span>
+        <div><strong>审查要点库</strong><small>品类要点与通用规则</small></div>
+      </article>
+      <article>
+        <span>03</span>
+        <div><strong>法律法规库</strong><small>仅引用已入库有效依据</small></div>
+      </article>
+      <article>
+        <span>04</span>
+        <div><strong>司法案例库</strong><small>实务后果与裁判逻辑</small></div>
+      </article>
     </section>
 
     <section class="content-grid">
@@ -65,7 +91,8 @@
         <div v-else-if="error" class="empty-block danger">{{ error }}</div>
         <div v-else-if="history.length === 0" class="empty-block">
           <h3>暂无审查记录</h3>
-          <p>开始审查后，记录会显示在这里。</p>
+          <p>上传第一份合同，建立可追溯的审查记录。</p>
+          <button class="empty-cta" @click="startNewReview">上传合同</button>
         </div>
         <div v-else-if="filteredHistory.length === 0" class="empty-block">
           <h3>未匹配到记录</h3>
@@ -147,10 +174,10 @@ export default {
     };
 
     const workflow = [
-      { step: '01', title: '上传合同', color: '#3b82f6', copy: '选择文件，进入在线预览。' },
-      { step: '02', title: '确认范围', color: '#ec4899', copy: '确认立场、重点和目标。' },
-      { step: '03', title: '查看结果', color: '#ef4444', copy: '集中查看风险和建议。' },
-      { step: '04', title: '采纳修改', color: '#111111', copy: '把修改同步到文档。' },
+      { step: '01', title: '上传合同', color: '#008c88', copy: '选择文件，进入合同预览。' },
+      { step: '02', title: '确认范围', color: '#d2ae62', copy: '确认品类、立场与审查重点。' },
+      { step: '03', title: '依据对标', color: '#008c88', copy: '核对范本、法规、案例与要点。' },
+      { step: '04', title: '形成意见', color: '#d2ae62', copy: '输出可用于会审的修改方案。' },
     ];
 
     return {
@@ -169,54 +196,82 @@ export default {
 
 <style scoped>
 .home-page {
-  height: calc(100vh - 56px);
+  height: calc(100vh - 72px);
   overflow: hidden;
-  background: #ffffff;
-  color: #111111;
+  background: transparent;
+  color: var(--za-ink);
   font-size: 13px;
 }
 
 .hero-section {
   position: relative;
   width: calc(100% - 36px);
-  max-width: 1180px;
-  height: 196px;
-  margin: 12px auto 0;
-  border-radius: 8px;
+  max-width: 1280px;
+  height: 220px;
+  margin: 18px auto 0;
+  border-radius: 3px;
   overflow: hidden;
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  background: linear-gradient(112deg, #006e6b 0%, #008c88 61%, #0f7774 100%);
+  box-shadow: 0 20px 54px rgba(0, 89, 86, .16);
 }
 
-.hero-image {
+.hero-architecture {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  overflow: hidden;
+  opacity: .88;
 }
 
-.hero-overlay {
+.hero-architecture::before {
+  content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.04));
+  background:
+    linear-gradient(90deg, rgba(0, 87, 83, .96) 0%, rgba(0, 117, 113, .68) 50%, rgba(0, 87, 83, .06) 82%),
+    repeating-linear-gradient(90deg, transparent 0 46px, rgba(255,255,255,.07) 46px 47px),
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.045) 31px 32px);
+}
+
+.tower {
+  position: absolute;
+  bottom: -14px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.08) 0 10px, transparent 10px 19px);
+  transform: skewY(-8deg);
+}
+
+.tower-one { right: 4%; width: 120px; height: 210px; }
+.tower-two { right: 16%; width: 92px; height: 154px; }
+.tower-three { right: 25%; width: 62px; height: 112px; }
+
+.horizon {
+  position: absolute;
+  right: -5%;
+  bottom: 30px;
+  width: 47%;
+  height: 1px;
+  background: rgba(210, 174, 98, .8);
+  transform: rotate(-10deg);
 }
 
 .hero-content {
   position: relative;
   z-index: 1;
-  max-width: 760px;
-  padding: 22px 28px;
+  max-width: 820px;
+  padding: 29px 44px;
   color: #ffffff;
 }
 
 .eyebrow {
-  margin: 0 0 5px;
-  color: inherit;
-  opacity: 0.66;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
+  margin: 0 0 12px;
+  color: #e4c987;
+  opacity: 1;
+  font-family: Georgia, serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .19em;
 }
 
 h1, h2, h3, p {
@@ -225,22 +280,64 @@ h1, h2, h3, p {
 
 h1 {
   margin: 0;
-  font-size: clamp(26px, 3.4vw, 40px);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: clamp(30px, 3.5vw, 46px);
   line-height: 1.08;
-  font-weight: 850;
+  font-weight: 700;
+  letter-spacing: .08em;
 }
 
 .hero-copy {
-  max-width: 620px;
-  margin: 8px 0 14px;
+  max-width: 660px;
+  margin: 12px 0 18px;
   color: rgba(255, 255, 255, 0.84);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.knowledge-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255,255,255,.76);
+  font-size: 11px;
+}
+
+.knowledge-note i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #e4c987;
+}
+
+.hero-side-note {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
+  z-index: 1;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  color: rgba(255,255,255,.58);
+  font-size: 9px;
+  letter-spacing: .12em;
+}
+
+.hero-side-note strong {
+  color: #e4c987;
+  font-family: Georgia, serif;
+  font-size: 13px;
 }
 
 button {
   border: 0;
-  border-radius: 8px;
+  border-radius: 2px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -257,33 +354,92 @@ button:disabled {
 }
 
 .primary-button {
-  background: #ffffff;
-  color: #111111;
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+  background: var(--za-gold);
+  color: #173533;
+}
+
+.primary-button span {
+  font-size: 16px;
 }
 
 .secondary-button {
   background: #ffffff;
-  color: #111111;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
+  color: var(--za-teal-deep);
+  box-shadow: inset 0 0 0 1px var(--za-line);
 }
 
 .content-grid {
-  height: calc(100vh - 288px);
-  max-width: 1180px;
-  margin: 12px auto 0;
+  height: calc(100vh - 390px);
+  max-width: 1280px;
+  margin: 14px auto 0;
   padding: 0 18px 12px;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
-  gap: 12px;
+  gap: 14px;
+}
+
+.evidence-strip {
+  width: calc(100% - 36px);
+  max-width: 1280px;
+  min-height: 64px;
+  margin: 10px auto 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--za-line);
+  border-top: 0;
+  background: #fff;
+  box-shadow: 0 9px 28px rgba(23, 53, 51, .035);
+}
+
+.evidence-strip article {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 10px 15px;
+}
+
+.evidence-strip article + article {
+  border-left: 1px solid var(--za-line);
+}
+
+.evidence-strip span {
+  color: var(--za-gold);
+  font-family: Georgia, serif;
+  font-size: 17px;
+}
+
+.evidence-strip div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.evidence-strip strong {
+  color: var(--za-ink);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 13px;
+  letter-spacing: .04em;
+}
+
+.evidence-strip small {
+  overflow: hidden;
+  color: var(--za-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflow-panel,
 .history-panel {
   min-height: 0;
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 3px;
+  padding: 18px;
   background: #ffffff;
-  box-shadow: inset 0 0 0 1px #e5e5e5, 0 10px 26px rgba(0, 0, 0, 0.04);
+  box-shadow: inset 0 0 0 1px var(--za-line), 0 10px 30px rgba(23, 53, 51, .04);
 }
 
 .section-head {
@@ -292,7 +448,9 @@ button:disabled {
 
 .section-head h2 {
   margin: 0;
-  font-size: 19px;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 20px;
+  letter-spacing: .04em;
   line-height: 1.24;
 }
 
@@ -313,16 +471,18 @@ button:disabled {
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 9px;
   align-items: start;
-  border-radius: 8px;
+  position: relative;
+  border-radius: 2px;
   padding: 10px;
-  background: #fafafa;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
+  background: #f8faf7;
+  box-shadow: inset 0 0 0 1px var(--za-line);
 }
 
 .workflow-item span {
   color: var(--accent);
   font-size: 12px;
-  font-weight: 900;
+  font-family: Georgia, serif;
+  font-weight: 700;
 }
 
 .workflow-item h3 {
@@ -334,21 +494,29 @@ button:disabled {
 .workflow-item p,
 .empty-block {
   margin: 0;
-  color: #666666;
+  color: var(--za-muted);
   line-height: 1.45;
 }
 
 .empty-block {
   padding: 26px;
   text-align: center;
-  background: #fafafa;
-  border-radius: 8px;
+  background: #f8faf7;
+  border-radius: 2px;
 }
 
 .empty-block h3 {
   margin: 0 0 5px;
-  color: #111111;
+  color: var(--za-ink);
   font-size: 16px;
+}
+
+.empty-cta {
+  min-height: 30px;
+  margin-top: 12px;
+  padding: 0 14px;
+  color: #fff;
+  background: var(--za-teal);
 }
 
 .empty-block.danger {
@@ -365,8 +533,8 @@ button:disabled {
 .history-search-input,
 .history-filter-select {
   padding: 6px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: 1px solid var(--za-line);
+  border-radius: 2px;
   font-size: 13px;
   outline: none;
   background: #fff;
@@ -379,7 +547,7 @@ button:disabled {
 
 .history-search-input:focus,
 .history-filter-select:focus {
-  border-color: #3b82f6;
+  border-color: var(--za-teal);
 }
 
 .history-filter-select {
@@ -400,5 +568,29 @@ button:disabled {
   .hero-section {
     width: calc(100% - 28px);
   }
+
+  .evidence-strip {
+    width: calc(100% - 28px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evidence-strip article:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--za-line);
+  }
+
+  .evidence-strip article:nth-child(4) {
+    border-top: 1px solid var(--za-line);
+  }
+}
+
+@media (max-width: 560px) {
+  .hero-section { height: auto; min-height: 294px; }
+  .hero-content { width: 100%; padding: 26px 22px; }
+  .hero-actions { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .primary-button { min-height: 42px; }
+  .hero-side-note { display: none; }
+  .evidence-strip { grid-template-columns: 1fr; }
+  .evidence-strip article + article { border-left: 0; border-top: 1px solid var(--za-line); }
 }
 </style>

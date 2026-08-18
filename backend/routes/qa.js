@@ -27,6 +27,7 @@ const db = require('../database');
 const { searchVectorDocumentsMulti } = require('../services/vectorStore');
 const { searchWeb } = require('../services/webSearch');
 const { createChatCompletion } = require('../services/llmClient');
+const { isKnowledgeBaseOnlyMode } = require('../services/reviewPolicy');
 
 const router = express.Router();
 
@@ -100,6 +101,7 @@ const buildHistoryAwareQuery = (question, history) => {
 };
 
 const shouldUseWebSearch = (question, knowledgeResults) => {
+    if (isKnowledgeBaseOnlyMode()) return false;
     if (includesAny(question, BLOCKED_WEB_TERMS)) return false;
     if (knowledgeResults.length < 2) return true;
     if (/\b(latest|current|today|web|internet|search|company|registration|case)\b/i.test(String(question || ''))) {
@@ -129,14 +131,20 @@ const buildQaKnowledgeQueries = (question, history = []) => {
 const buildSystemPrompt = () => [
     'You are a professional and careful legal contract Q&A assistant.',
     'Answer in the same language as the user unless they ask otherwise.',
-    'Available server-side tools are already executed before you respond: knowledge_base_search and public_web_search.',
+    isKnowledgeBaseOnlyMode()
+        ? 'Only knowledge_base_search is permitted. Public web search and external company verification are disabled.'
+        : 'Available server-side tools are already executed before you respond: knowledge_base_search and public_web_search.',
     'Do not claim you can execute arbitrary tools, access local files, databases, credentials, private systems, or internal networks.',
     'Use the current conversation history to resolve follow-up questions and pronouns.',
     'Do not invent statutes, article numbers, case names, court views, company registration data, or contract content.',
     'Legal provisions, case documents, and internal rules must come from the provided knowledge base results. If evidence is insufficient, say that the current knowledge base did not retrieve enough support.',
     'When the user asks about contract compliance, risks, or legality, you must compare the selected contract content against each retrieved legal provision clause by clause, especially checking if mandatory numbers (deadlines, time limits, ratios, amounts, thresholds) are consistent. Proactively flag any discrepancy between the contract text and the legal requirements, and cite the specific provision.',
-    'Public web search results are only clues. If a result is verified=false, do not use it as a confirmed conclusion.',
-    'For company/entity checks, tell the user to verify final facts through official channels such as the National Enterprise Credit Information Publicity System, regulators, or court websites.',
+    isKnowledgeBaseOnlyMode()
+        ? 'Do not supplement the answer with external statutes, cases, templates, company data, or general model memory. If the knowledge base is insufficient, state that clearly.'
+        : 'Public web search results are only clues. If a result is verified=false, do not use it as a confirmed conclusion.',
+    isKnowledgeBaseOnlyMode()
+        ? 'For company or entity checks, state that the approved knowledge base contains no sufficient verification basis unless matching evidence was retrieved.'
+        : 'For company/entity checks, tell the user to verify final facts through official channels such as the National Enterprise Credit Information Publicity System, regulators, or court websites.',
     'For private personal data, credentials, security bypasses, or offensive requests, refuse that part and suggest a lawful verification channel. Please Respond in Chinese.',
 ].join('\n');
 
@@ -165,7 +173,9 @@ const buildEvidencePrompt = ({ contextText, knowledgeResults, webResults, toolTr
         knowledgeContext || 'No matching laws, case documents, or review rules were retrieved.',
         '',
         'Public web search results:',
-        webContext || 'Public web search was not triggered, blocked by safety policy, or returned no usable results.',
+        isKnowledgeBaseOnlyMode()
+            ? 'Disabled by the approved-knowledge-base-only policy.'
+            : (webContext || 'Public web search was not triggered, blocked by safety policy, or returned no usable results.'),
     ].join('\n');
 };
 
@@ -196,7 +206,10 @@ const buildQaContext = async ({ question, contractId, history = [] }) => {
         webResults = await searchWeb(searchQuery, { count: 5 });
         toolTrace.push({ name: 'public_web_search', status: `completed:${webResults.length}` });
     } else {
-        toolTrace.push({ name: 'public_web_search', status: 'skipped' });
+        toolTrace.push({
+            name: 'public_web_search',
+            status: isKnowledgeBaseOnlyMode() ? 'disabled:knowledge_base_only' : 'skipped',
+        });
     }
 
     const llmMessages = [

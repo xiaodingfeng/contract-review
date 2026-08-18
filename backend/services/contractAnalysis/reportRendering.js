@@ -344,6 +344,8 @@ const findPdfFont = () => {
         '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
         '/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc',
         '/usr/local/share/fonts/NotoSansCJK-Regular.ttc',
+        '/System/Library/Fonts/STHeiti Light.ttc',
+        '/Library/Fonts/Arial Unicode.ttf',
     ];
     const found = candidates.find((fontPath) => fs.existsSync(fontPath));
     if (!found) {
@@ -458,12 +460,219 @@ const streamReviewReportPdf = (res, contract, reviewData = {}) => {
     doc.end();
 };
 
+const asArray = (value) => (Array.isArray(value) ? value : []);
+
+const formatBasisText = (basis) => {
+    if (Array.isArray(basis)) {
+        const text = basis.map((item) => {
+            if (typeof item === 'string') return item;
+            return [item?.title, item?.clause, item?.content].filter(Boolean).join(' ');
+        }).filter(Boolean).join('\n');
+        return text || '当前知识库未检索到直接依据';
+    }
+    if (basis && typeof basis === 'object') {
+        return [basis.title, basis.clause, basis.content].filter(Boolean).join(' ') || '当前知识库未检索到直接依据';
+    }
+    return String(basis || '当前知识库未检索到直接依据');
+};
+
+const buildZhongAnSections = (reviewData = {}) => {
+    const core = reviewData.core_information || {};
+    const coreItems = [
+        ...asArray(core.cost_business).map((item) => ({ ...item, group: '成本业务维度' })),
+        ...asArray(core.legal_compliance).map((item) => ({ ...item, group: '法务合规维度' })),
+    ];
+
+    const explicitTemplateDifferences = asArray(reviewData.template_differences);
+    const templateItems = explicitTemplateDifferences.length
+        ? explicitTemplateDifferences
+        : asArray(reviewData.standard_comparison);
+
+    const baseFindings = asArray(reviewData.compliance_findings).length
+        ? asArray(reviewData.compliance_findings)
+        : asArray(reviewData.dispute_points);
+    const findingItems = [
+        ...baseFindings,
+        ...asArray(reviewData.missing_clauses).map((item) => ({
+            ...item,
+            issue_type: item.issue_type || '合规瑕疵',
+            original_clause: item.original_clause || '合同未约定',
+        })),
+        ...asArray(reviewData.text_errors).map((item) => ({
+            ...item,
+            issue_type: '文本错误',
+            title: item.title || '文本一致性问题',
+        })),
+        ...asArray(reviewData.calculation_errors).map((item) => ({
+            ...item,
+            issue_type: '计算错误',
+            title: item.title || item.item || '附件表格计算问题',
+            original_clause: item.original_clause || item.original_value || '',
+        })),
+    ];
+
+    return [
+        {
+            title: '一、合同核心信息摘取',
+            empty: '尚未生成合同核心信息摘取结果。',
+            items: coreItems,
+            lines: (item) => [
+                `${item.group}｜${item.dimension || '核心条款'}`,
+                `合同原文：${item.original_clause || '合同未约定'}`,
+                item.extracted_value ? `摘取值：${item.extracted_value}` : '',
+            ].filter(Boolean),
+        },
+        {
+            title: '二、标准范本对标差异汇总',
+            empty: '当前知识库未检索到可用于逐条对标的匹配范本。',
+            items: templateItems,
+            lines: (item) => [
+                item.template_source || item.category_label || item.category || '内部标准范本',
+                `范本原文：${item.template_clause || item.matched_standard?.clause_text || '当前知识库未返回范本原文'}`,
+                `合同内容：${item.contract_clause || item.contract_clause_text || '合同未约定'}`,
+                `偏离点：${item.deviation || item.diff_description || '待人工对比'}`,
+                `影响：${item.impact || '当前知识库未生成明确影响说明'}`,
+            ],
+        },
+        {
+            title: '三、合规要点缺失与法律问题识别',
+            empty: '尚未生成待优化项。',
+            items: findingItems,
+            lines: (item) => [
+                `${item.issue_type || '合规瑕疵'}｜${item.title || '待优化项'}`,
+                item.original_clause ? `合同原文：${item.original_clause}` : '',
+                `问题说明：${item.description || item.dispute_rationale || '需要结合知识库依据进一步核对'}`,
+                `依据：${formatBasisText(item.basis || item.legal_reference)}`,
+            ].filter(Boolean),
+        },
+        {
+            title: '四、逐条结构化修正建议',
+            empty: '尚未生成可直接替换的修正条款。',
+            items: asArray(reviewData.modification_suggestions),
+            lines: (item) => [
+                `${item.issue_type || '合规瑕疵'}｜${item.title || '修改建议'}`,
+                `现状条款：${item.current_clause || item.original_text || item.original_clause || '合同未约定'}`,
+                `法律／范本依据：${formatBasisText(item.basis || item.reason || item.rationale)}`,
+                `修正建议：${item.suggested_text || item.modification || '当前知识库依据不足，暂不生成替换条款'}`,
+            ],
+        },
+    ];
+};
+
+const renderZhongAnReviewReportHtml = (contract, reviewData = {}) => {
+    const sections = buildZhongAnSections(reviewData);
+    const sectionHtml = sections.map((section) => `
+      <section>
+        <h2>${escapeHtml(section.title)}</h2>
+        ${section.items.length ? section.items.map((item, index) => {
+            const lines = section.lines(item);
+            return `<article class="item"><h3>${index + 1}. ${escapeHtml(lines[0] || '')}</h3>${lines.slice(1).map((line) => `<p>${escapeHtml(line)}</p>`).join('')}</article>`;
+        }).join('\n') : `<p class="empty">${escapeHtml(section.empty)}</p>`}
+      </section>`).join('\n');
+
+    return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(contract.original_filename)} 合同审查报告</title>
+  <style>
+    body{max-width:980px;margin:0 auto;padding:42px;color:#17253a;background:#fbfaf7;font-family:"PingFang SC","Noto Sans CJK SC",sans-serif;line-height:1.75}
+    header{padding:28px 30px;color:#fff;background:#17253a;border-left:8px solid #b33a2f}
+    h1{margin:0;font-family:"Songti SC",serif;font-size:30px;letter-spacing:.08em} header p{margin:8px 0 0;color:#d7e0ea}
+    .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin:18px 0;padding:14px 18px;background:#fff;border:1px solid #dfe3e8;font-size:13px}
+    section{margin:28px 0} h2{padding-bottom:8px;border-bottom:2px solid #17253a;font-family:"Songti SC",serif;font-size:20px}
+    .item{margin:12px 0;padding:14px 16px;background:#fff;border:1px solid #dfe3e8;border-left:3px solid #b33a2f}.item h3{margin:0 0 8px;font-size:14px}.item p{margin:5px 0;white-space:pre-wrap}.empty{padding:16px;color:#6d7786;background:#fff;border:1px dashed #c9cdd2}
+    footer{margin-top:36px;padding-top:12px;border-top:1px solid #dfe3e8;color:#6d7786;font-size:12px}
+    @media print{body{padding:20px;background:#fff}}
+  </style>
+</head>
+<body>
+  <header><h1>合同审查报告</h1><p>成本管控与法务合规联合审查｜仅限知识库依据</p></header>
+  <div class="meta">
+    <div><strong>文件名称：</strong>${escapeHtml(contract.original_filename)}</div>
+    <div><strong>导出时间：</strong>${escapeHtml(new Date().toLocaleString('zh-CN'))}</div>
+    <div><strong>审查立场：</strong>${escapeHtml(contract.perspective || '未指定')}</div>
+    <div><strong>审查模板：</strong>${escapeHtml(reviewData.template?.name || '按匹配知识库执行')}</div>
+  </div>
+  ${sectionHtml}
+  <footer>本报告仅依据系统内已提供的合同范本、法律法规、司法案例及合同审查要点生成。知识库未覆盖事项不作推断。</footer>
+</body>
+</html>`;
+};
+
+const generateZhongAnDocxBuffer = (contract, reviewData = {}) => {
+    const escapeXml = (text) => String(text || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    const paragraphs = [];
+    const addParagraph = (text, style = '') => {
+        const styleXml = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : '';
+        paragraphs.push(`<w:p>${styleXml}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`);
+    };
+
+    addParagraph('合同审查报告', 'Title');
+    addParagraph('成本管控与法务合规联合审查｜仅限知识库依据');
+    addParagraph(`文件名称：${contract.original_filename}`);
+    addParagraph(`导出时间：${new Date().toLocaleString('zh-CN')}`);
+    addParagraph(`审查立场：${contract.perspective || '未指定'}`);
+
+    for (const section of buildZhongAnSections(reviewData)) {
+        addParagraph(section.title, 'Heading1');
+        if (!section.items.length) {
+            addParagraph(section.empty);
+            continue;
+        }
+        section.items.forEach((item, index) => {
+            section.lines(item).forEach((line, lineIndex) => addParagraph(`${lineIndex === 0 ? `${index + 1}. ` : ''}${line}`));
+        });
+    }
+    addParagraph('本报告仅依据系统内已提供的合同范本、法律法规、司法案例及合同审查要点生成。知识库未覆盖事项不作推断。');
+
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs.join('\n')}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+    const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+    const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+    const documentRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+    const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="SimSun"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Title"><w:rPr><w:b/><w:sz w:val="36"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:rPr><w:b/><w:sz w:val="28"/></w:rPr></w:style></w:styles>`;
+    const zip = new AdmZip();
+    zip.addFile('[Content_Types].xml', Buffer.from(contentTypesXml, 'utf8'));
+    zip.addFile('_rels/.rels', Buffer.from(relsXml, 'utf8'));
+    zip.addFile('word/document.xml', Buffer.from(documentXml, 'utf8'));
+    zip.addFile('word/_rels/document.xml.rels', Buffer.from(documentRelsXml, 'utf8'));
+    zip.addFile('word/styles.xml', Buffer.from(stylesXml, 'utf8'));
+    return zip.toBuffer();
+};
+
+const streamZhongAnReviewReportPdf = (res, contract, reviewData = {}) => {
+    const doc = new PDFDocument({ margin: 48, size: 'A4' });
+    const fontPath = findPdfFont();
+    if (fontPath) {
+        try { doc.font(fontPath); } catch (error) { console.warn(`[PDF] Failed to load font ${fontPath}: ${error.message}`); }
+    }
+    doc.pipe(res);
+    doc.fontSize(18).text('合同审查报告');
+    doc.moveDown(0.4).fontSize(10).text('成本管控与法务合规联合审查｜仅限知识库依据');
+    doc.text(`文件名称：${contract.original_filename}`);
+    doc.text(`导出时间：${new Date().toLocaleString('zh-CN')}`);
+    doc.text(`审查立场：${contract.perspective || '未指定'}`);
+    for (const section of buildZhongAnSections(reviewData)) {
+        if (section.items.length) {
+            addPdfSection(doc, section.title, section.items, (item) => section.lines(item).join('\n'));
+        } else {
+            doc.moveDown().fontSize(15).text(section.title);
+            doc.fontSize(10).text(section.empty);
+        }
+    }
+    doc.moveDown().fontSize(9).fillColor('#6d7786').text('本报告仅依据系统内已提供的合同范本、法律法规、司法案例及合同审查要点生成。知识库未覆盖事项不作推断。');
+    doc.end();
+};
+
 module.exports = {
     escapeHtml,
     parseJsonField,
-    renderReviewReportHtml,
-    generateDocxBuffer,
+    renderReviewReportHtml: renderZhongAnReviewReportHtml,
+    generateDocxBuffer: generateZhongAnDocxBuffer,
     findPdfFont,
     addPdfSection,
-    streamReviewReportPdf,
+    streamReviewReportPdf: streamZhongAnReviewReportPdf,
+    buildZhongAnSections,
 };

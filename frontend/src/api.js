@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { getUserId } from './user'; // Assuming user.js is in the same src directory
 
+const defaultBackendUrl = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
+const backendBaseUrl = (import.meta.env.VITE_APP_BACKEND_API_URL || defaultBackendUrl).replace(/\/$/, '');
+
 const apiClient = axios.create({
-    baseURL: (import.meta.env.VITE_APP_BACKEND_API_URL || 'http://localhost:3000') + '/api',
+    baseURL: `${backendBaseUrl}/api`,
     headers: {
         'Content-Type': 'application/json'
     }

@@ -1,9 +1,12 @@
 <template>
   <main class="settings-page">
     <section class="settings-head">
-      <p class="eyebrow">知识库</p>
+      <p class="eyebrow">KNOWLEDGE GOVERNANCE</p>
       <h1>管理审查依据</h1>
       <p>检索、导入和删除法律条文、裁判文书、审查规则。删除失效依据后，后续审查会使用新的知识库结果。</p>
+      <div class="basis-map" aria-label="知识库类型">
+        <span>合同范本</span><span>法律法规</span><span>司法案例</span><span>审查要点</span>
+      </div>
     </section>
 
     <el-tabs v-model="activeTab" class="settings-tabs">
@@ -70,40 +73,86 @@ export default {
 
 <style scoped>
 .settings-page {
-  max-width: 1160px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 12px 16px 24px;
-  color: #111111;
+  padding: 18px 18px 30px;
+  color: var(--za-ink);
   font-size: 13px;
 }
 
 .settings-head {
-  margin-bottom: 8px;
+  position: relative;
+  margin-bottom: 12px;
+  padding: 20px 22px 16px;
+  border: 1px solid var(--za-line);
+  border-top: 3px solid var(--za-teal);
+  background: linear-gradient(105deg, #fff 0%, #fff 67%, #f4ead2 140%);
+  box-shadow: 0 10px 30px rgba(23, 53, 51, .04);
 }
 
 .eyebrow {
   margin: 0 0 4px;
-  color: #666666;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
+  color: var(--za-gold-ink);
+  font-family: Georgia, serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .18em;
 }
 
 h1 {
   margin: 0;
-  font-size: 24px;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 27px;
   line-height: 1.14;
-  letter-spacing: 0;
+  letter-spacing: .06em;
 }
 
 .settings-head p {
   margin: 4px 0 0;
-  color: #666666;
+  color: var(--za-muted);
   line-height: 1.45;
 }
 
+.basis-map {
+  display: flex;
+  gap: 7px;
+  margin-top: 13px;
+  flex-wrap: wrap;
+}
+
+.basis-map span {
+  padding: 5px 9px;
+  border: 1px solid #d7e7e3;
+  color: var(--za-teal-deep);
+  background: #f5faf8;
+  font-size: 10px;
+}
+
+.basis-map span::before {
+  content: '·';
+  margin-right: 5px;
+  color: var(--za-gold);
+  font-weight: 900;
+}
+
 .settings-tabs {
-  margin-top: 8px;
+  margin-top: 10px;
+  padding: 0 4px;
+}
+
+.settings-tabs :deep(.el-tabs__item) {
+  height: 44px;
+  color: #516663;
+  font-weight: 600;
+}
+
+.settings-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--za-teal);
+}
+
+.settings-tabs :deep(.el-tabs__active-bar) {
+  height: 3px;
+  background: var(--za-gold);
 }
 
 @media (max-width: 780px) {

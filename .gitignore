@@ -58,3 +58,15 @@ report.md
 
 .trae
 .gemini
+
+# Local browser verification artifacts
+.playwright-cli/
+/output/playwright/
+/output/product-design-audit/
+
+# POC deployment secrets and generated access credentials
+/deploy/poc.env
+/deploy/.htpasswd
+
+# Customer contract samples and private knowledge-base source files
+/local-knowledge/

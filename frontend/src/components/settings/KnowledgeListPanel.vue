@@ -226,11 +226,11 @@ export default {
 
 <style scoped>
 .panel {
-  margin-top: 8px;
-  border-radius: 8px;
-  padding: 12px;
+  margin-top: 10px;
+  border-radius: 3px;
+  padding: 16px;
   background: #ffffff;
-  box-shadow: inset 0 0 0 1px #e5e5e5, 0 10px 26px rgba(0, 0, 0, 0.04);
+  box-shadow: inset 0 0 0 1px var(--za-line), 0 10px 28px rgba(23, 53, 51, .04);
 }
 .vector-empty-banner {
   background: #fffbeb;
@@ -254,18 +254,20 @@ export default {
 }
 .panel-title h2 {
   margin: 0;
-  font-size: 16px;
-  letter-spacing: 0;
+  color: var(--za-ink);
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 18px;
+  letter-spacing: .04em;
 }
 .panel-title p,
 .muted {
   margin: 4px 0 0;
-  color: #666666;
+  color: var(--za-muted);
   line-height: 1.45;
 }
 button {
   border: 0;
-  border-radius: 8px;
+  border-radius: 3px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -283,14 +285,15 @@ button:disabled {
   font-size: 12px;
 }
 .primary-button {
-  background: #111111;
+  background: var(--za-teal);
   color: #ffffff;
 }
+.primary-button:hover { background: var(--za-teal-deep); }
 .secondary-button,
 .pager button {
   background: #ffffff;
-  color: #111111;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
+  color: var(--za-teal-deep);
+  box-shadow: inset 0 0 0 1px var(--za-line);
 }
 .danger-button {
   background: #ef4444;
@@ -301,23 +304,36 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 9px;
-  margin-top: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--za-line);
+  background: #f8faf7;
 }
 .toolbar .el-input { flex: 1; }
 .toolbar .el-select { width: 150px; }
 .knowledge-list {
-  margin-top: 8px;
+  margin-top: 10px;
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 .knowledge-item {
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: #fafafa;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
+  position: relative;
+  border-radius: 3px;
+  padding: 11px 12px 10px 15px;
+  background: #fbfcfa;
+  box-shadow: inset 0 0 0 1px var(--za-line);
   min-width: 0;
   overflow: hidden;
+}
+.knowledge-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: linear-gradient(var(--za-teal), var(--za-gold));
 }
 .knowledge-item header,
 .knowledge-item footer {
@@ -339,7 +355,9 @@ button:disabled {
 }
 .knowledge-item h3 {
   margin: 0;
+  color: var(--za-ink);
   font-size: 13px;
+  font-weight: 700;
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -348,7 +366,7 @@ button:disabled {
 .knowledge-item header p,
 .knowledge-item small {
   margin: 3px 0 0;
-  color: #666666;
+  color: var(--za-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -357,24 +375,26 @@ button:disabled {
 .knowledge-item header span {
   flex-shrink: 0;
   max-width: 42%;
-  border-radius: 999px;
+  border-radius: 2px;
   padding: 3px 7px;
   background: #ffffff;
-  color: #111111;
+  color: #80662d;
   font-size: 12px;
-  box-shadow: inset 0 0 0 1px #e5e5e5;
+  box-shadow: inset 0 0 0 1px #e7d8b6;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .content {
-  margin: 5px 0;
-  line-height: 1.45;
-  color: #333333;
+  display: -webkit-box;
+  margin: 7px 0;
+  line-height: 1.55;
+  color: #465a57;
   max-width: 100%;
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .item-actions {
   flex-shrink: 0;
@@ -390,7 +410,7 @@ button:disabled {
   line-height: 1.2;
 }
 .text-button {
-  color: #111111;
+  color: var(--za-teal-deep);
   position: relative;
 }
 .text-danger {

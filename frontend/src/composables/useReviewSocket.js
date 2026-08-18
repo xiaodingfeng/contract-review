@@ -30,7 +30,8 @@ export function useReviewSocket(state, deps) {
     const setupSocket = (contractId) => {
         if (socket.value) socket.value.disconnect();
 
-        const backendUrl = import.meta.env.VITE_APP_BACKEND_API_URL || 'http://localhost:3000';
+        const defaultBackendUrl = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
+        const backendUrl = import.meta.env.VITE_APP_BACKEND_API_URL || defaultBackendUrl;
         socket.value = io(backendUrl);
 
         socket.value.on('connect', () => {

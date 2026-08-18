@@ -1,7 +1,8 @@
 <template>
-  <div class="flex-grow overflow-y-auto flex flex-col items-center py-8 px-4 text-center">
-    <h1 class="text-3xl font-bold tracking-tight text-text-dark sm:text-4xl">智能合同审查</h1>
-    <p class="mt-3 text-base leading-7 text-text-light">上传您的合同文档，AI 将为您深度分析、识别风险、守护权益。</p>
+  <div class="upload-stage flex-grow overflow-y-auto flex flex-col items-center py-8 px-4 text-center">
+    <p class="upload-kicker">ZHONG AN GROUP · INTERNAL REVIEW</p>
+    <h1 class="text-3xl font-bold tracking-tight text-text-dark sm:text-4xl">众安集团合同审核</h1>
+    <p class="mt-3 text-sm leading-7 text-text-light">上传待审合同，系统将依托内部范本、法规、案例与审查要点形成修改意见。</p>
 
     <div class="mt-10 w-full max-w-2xl">
       <el-upload
@@ -127,8 +128,24 @@ export default {
 </script>
 
 <style scoped>
+.upload-stage {
+  background:
+    radial-gradient(circle at 50% 18%, rgba(210, 174, 98, .12), transparent 25%),
+    linear-gradient(180deg, #fff 0%, #f6f7f3 100%);
+}
+
+.upload-kicker {
+  margin: 0 0 10px;
+  color: var(--za-gold-ink);
+  font-family: Georgia, serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .18em;
+}
+
 .upload-dragger :deep(.el-upload-dragger) {
-  @apply bg-bg-subtle border-2 border-dashed border-border-color rounded-lg transition-colors duration-200 ease-in-out;
+  @apply bg-bg-subtle border-2 border-dashed border-border-color transition-colors duration-200 ease-in-out;
+  border-radius: 3px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -139,17 +156,18 @@ export default {
 
 .upload-dragger :deep(.el-upload-dragger:hover) {
   @apply border-primary;
+  background: #edf7f5;
 }
 </style>
 
 <style>
 .linked-analysis-panel {
-  border: 1px solid #dbe3ef;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #dde4df;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f7f3 100%);
   padding: 20px;
   margin-bottom: 32px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 28px rgba(23, 53, 51, .06);
 }
 .linked-analysis-panel__picker {
   display: flex;
@@ -166,18 +184,18 @@ export default {
 }
 .linked-analysis-panel__file-button {
   flex: 0 0 auto;
-  border: 1px solid #2563eb;
-  border-radius: 8px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border: 1px solid #008c88;
+  border-radius: 3px;
+  background: #edf7f5;
+  color: #006f6c;
   padding: 10px 14px;
   font-size: 12px;
   font-weight: 700;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 .linked-analysis-panel__file-button:hover {
-  background: #dbeafe;
-  border-color: #1d4ed8;
+  background: #d7eeeb;
+  border-color: #006f6c;
 }
 .linked-analysis-panel__count {
   flex: 1;
@@ -187,8 +205,8 @@ export default {
 }
 .linked-analysis-panel__button {
   flex: 0 0 auto;
-  border-radius: 8px;
-  background: #2563eb;
+  border-radius: 3px;
+  background: #008c88;
   color: #fff;
   padding: 10px 16px;
   font-size: 12px;
@@ -196,7 +214,7 @@ export default {
   transition: background 0.2s ease, opacity 0.2s ease;
 }
 .linked-analysis-panel__button:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: #006f6c;
 }
 .linked-analysis-panel__button:disabled {
   cursor: not-allowed;

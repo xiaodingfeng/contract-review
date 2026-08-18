@@ -135,30 +135,57 @@ const buildStandardComparison = async (plainText, contractType) => {
     return comparisons;
 };
 
-const normalizeAnalysisResult = (result, plainText = '') => ({
-    dispute_points: Array.isArray(result.dispute_points)
-        ? result.dispute_points.map((dp) => ({
-            ...dp,
-            evidence: buildEvidence(dp, plainText, result.relevant_laws || []),
+const normalizeAnalysisResult = (result, plainText = '') => {
+    const complianceFindings = Array.isArray(result.compliance_findings)
+        ? result.compliance_findings
+        : (Array.isArray(result.dispute_points) ? result.dispute_points : []);
+    const modificationSuggestions = Array.isArray(result.modification_suggestions)
+        ? result.modification_suggestions.map((item) => ({
+            ...item,
+            original_text: item.original_text || item.current_clause || '',
+            current_clause: item.current_clause || item.original_text || '',
+            reason: item.reason || item.description || '',
         }))
-        : [],
+        : [];
+
+    return {
+    core_information: result.core_information && typeof result.core_information === 'object'
+        ? result.core_information
+        : { cost_business: [], legal_compliance: [] },
+    template_differences: Array.isArray(result.template_differences) ? result.template_differences : [],
+    compliance_findings: complianceFindings,
+    dispute_points: complianceFindings
+        .map((dp) => ({
+            ...dp,
+            legal_reference: dp.legal_reference || dp.basis || '',
+            dispute_rationale: dp.dispute_rationale || dp.description || '',
+            evidence: buildEvidence(dp, plainText, result.relevant_laws || []),
+        })),
     missing_clauses: Array.isArray(result.missing_clauses) ? result.missing_clauses : [],
     party_review: Array.isArray(result.party_review) ? result.party_review : [],
-    modification_suggestions: Array.isArray(result.modification_suggestions) ? result.modification_suggestions : [],
+    modification_suggestions: modificationSuggestions,
     breach_cost_analysis: Array.isArray(result.breach_cost_analysis) ? result.breach_cost_analysis : [],
+    text_errors: Array.isArray(result.text_errors) ? result.text_errors : [],
+    calculation_errors: Array.isArray(result.calculation_errors) ? result.calculation_errors : [],
     seal_analysis: Array.isArray(result.seal_analysis) ? result.seal_analysis : [],
     relevant_laws: Array.isArray(result.relevant_laws) ? result.relevant_laws : [],
     company_review: Array.isArray(result.company_review) ? result.company_review : [],
-});
+    };
+};
 
 // 长合同分层审查：聚合各条款的 LLM 结果，做去重与跨条款一致性标注
 const aggregateClauseResults = (clauseResults) => {
     const aggregate = {
+        core_information: { cost_business: [], legal_compliance: [] },
+        template_differences: [],
+        compliance_findings: [],
         dispute_points: [],
         missing_clauses: [],
         party_review: [],
         modification_suggestions: [],
         breach_cost_analysis: [],
+        text_errors: [],
+        calculation_errors: [],
         seal_analysis: [],
         relevant_laws: [],
         company_review: [],
@@ -168,11 +195,16 @@ const aggregateClauseResults = (clauseResults) => {
     const msOriginalSeen = new Map(); // modification_suggestions original_text → clause_id（跨条款重复标注）
     for (const res of clauseResults) {
         const clauseId = res.clause_id || '';
+        aggregate.core_information.cost_business.push(...(res.core_information?.cost_business || []).map((item) => ({ ...item, clause_id: clauseId })));
+        aggregate.core_information.legal_compliance.push(...(res.core_information?.legal_compliance || []).map((item) => ({ ...item, clause_id: clauseId })));
+        aggregate.template_differences.push(...(res.template_differences || []).map((item) => ({ ...item, clause_id: clauseId })));
         for (const dp of (res.dispute_points || [])) {
             const key = `${dp.title || ''}|${dp.original_clause || ''}`;
             if (dpSeen.has(key)) continue;
             dpSeen.add(key);
-            aggregate.dispute_points.push({ ...dp, clause_id: clauseId });
+            const finding = { ...dp, clause_id: clauseId };
+            aggregate.dispute_points.push(finding);
+            aggregate.compliance_findings.push(finding);
         }
         for (const mc of (res.missing_clauses || [])) {
             const key = mc.title || '';
@@ -196,6 +228,8 @@ const aggregateClauseResults = (clauseResults) => {
             aggregate.modification_suggestions.push(item);
         }
         for (const bc of (res.breach_cost_analysis || [])) aggregate.breach_cost_analysis.push(bc);
+        for (const item of (res.text_errors || [])) aggregate.text_errors.push({ ...item, clause_id: clauseId });
+        for (const item of (res.calculation_errors || [])) aggregate.calculation_errors.push({ ...item, clause_id: clauseId });
     }
     // 跨条款一致性检查:违约金 vs 付款金额口径
     const extractAmount = (text) => {

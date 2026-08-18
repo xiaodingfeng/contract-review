@@ -5,9 +5,9 @@ import 'element-plus/dist/index.css';
 import './assets/css/tailwind.css';
 import { identifyUser } from './user';
 
-const logoUrl = '/asserts/logo.png';
+const logoUrl = '/asserts/zhongan-logo.png';
 
-document.title = '合同审查';
+document.title = '众安集团合同审核';
 const favicon = document.querySelector('link[rel="icon"]') || document.createElement('link');
 favicon.rel = 'icon';
 favicon.href = logoUrl;
@@ -30,6 +30,8 @@ main();
 
 window.ResizeObserver = class _NewResizeObserver extends ResizeObserver {
   constructor(callback) {
-    super(() => window.requestAnimationFrame(() => callback.apply(this, arguments)));
+    super((entries, observer) => {
+      window.requestAnimationFrame(() => callback(entries, observer));
+    });
   }
 };
