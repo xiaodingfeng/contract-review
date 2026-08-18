@@ -29,7 +29,8 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       DB_POOL_MIN: "0"
-      DB_POOL_MAX: "10"
+      DB_POOL_MAX: "${DB_POOL_MAX:-20}"
+      VECTOR_SEARCH_CONCURRENCY: "${VECTOR_SEARCH_CONCURRENCY:-10}"
       VECTOR_STORE: postgres
       REVIEW_KB_ONLY_MODE: "true"
     depends_on:
