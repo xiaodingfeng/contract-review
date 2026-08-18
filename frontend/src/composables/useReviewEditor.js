@@ -429,9 +429,13 @@ export function useReviewEditor(state, helpers) {
             if (response.data?.editorConfig) contract.editorConfig = response.data.editorConfig;
             const refreshed = await refreshEditorDocument();
             onSuccess?.({ appended: true, refreshed, ...response.data });
-            ElMessage.success(refreshed
-                ? '新增条款已写入合同，并已刷新左侧文档。'
-                : '新增条款已写入合同，刷新页面后可查看。');
+            if (response.data?.alreadyPresent) {
+                ElMessage.info('该条款已存在于合同中，未重复追加。');
+            } else {
+                ElMessage.success(refreshed
+                    ? '新增条款已写入合同，并已刷新左侧文档。'
+                    : '新增条款已写入合同，刷新页面后可查看。');
+            }
         } catch (err) {
             const msg = err.response?.data?.error || '新增条款失败。';
             ElMessage.error(msg);

@@ -161,9 +161,6 @@ module.exports = function (router) {
                 });
             }
 
-            // 创建版本快照
-            const version = await createContractVersionSnapshot(contract, 'append-clause');
-
             // 使用 adm-zip 修改 DOCX，在 document.xml 末尾追加段落
             const zip = new AdmZip(contract.storage_path);
             const documentXmlEntry = zip.getEntry('word/document.xml');
@@ -174,6 +171,19 @@ module.exports = function (router) {
             const escapeXml = (text) => String(text || '')
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+            const escapedContent = escapeXml(String(content).trim());
+            if (documentXml.includes(escapedContent)) {
+                return res.json({
+                    ok: true,
+                    alreadyPresent: true,
+                    message: `条款「${title || '未命名条款'}」已存在，未重复追加。`,
+                    editorConfig: buildOnlyOfficeConfig(contract, ext),
+                });
+            }
+
+            // 仅在确实写入内容时创建版本快照
+            const version = await createContractVersionSnapshot(contract, 'append-clause');
 
             // 构建追加的段落 XML
             const titlePara = title
